@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends
 from app.config.settings import settings
 from app.db.connection import db_connection, get_db
 
-from app.api.routes import checkouts, payments, recovery
+from app.api.routes import checkouts, payments, recovery, metrics, audit, simulation
 
 # Configure application logging
 logging.basicConfig(
@@ -37,6 +37,9 @@ app = FastAPI(
 app.include_router(checkouts.router, prefix="/api/v1", tags=["Checkouts"])
 app.include_router(payments.router, prefix="/api/v1", tags=["Payments"])
 app.include_router(recovery.router, prefix="/api/v1", tags=["Recovery"])
+app.include_router(metrics.router, prefix="/api/v1", tags=["Metrics"])
+app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
+app.include_router(simulation.router, prefix="/api/v1", tags=["Simulation"])
 
 @app.get("/health")
 async def health_check(db = Depends(get_db)):
