@@ -3,8 +3,6 @@ from pydantic import BaseModel, Field
 from app.db.connection import get_db
 from app.models.transaction import Transaction
 from app.audit.logger import log_audit_event
-from app.engines.diagnosis.engine import diagnosis_engine
-from app.engines.policy.engine import policy_engine
 
 router = APIRouter()
 
@@ -63,9 +61,18 @@ async def handle_payment_webhook(req: WebhookRequest, db = Depends(get_db)):
             # If transition fails, raise bad request
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
             
-    # Trigger Diagnosis Engine -> Policy Engine
-    diag = await diagnosis_engine.diagnose_transaction(txn.id, error_code=payment.error_code)
-    await policy_engine.evaluate_policy(txn.id, diag["root_cause"])
+    # Trigger Recovery Service in background
+    from app.services.recovery_service import recovery_service
+    import asyncio
+    task = asyncio.create_task(
+        recovery_service.process_failed_payment(
+            txn.id,
+            error_code=payment.error_code,
+            error_description=payment.error_description,
+            fast_mode=True
+        )
+    )
+    recovery_service.track_task(task)
 
     # 4. Log Webhook Ingestion event
     await log_audit_event(

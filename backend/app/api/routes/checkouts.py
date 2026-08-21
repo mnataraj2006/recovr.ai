@@ -8,8 +8,6 @@ from app.models.customer import Customer
 from app.models.checkout import Checkout, CheckoutItem
 from app.models.transaction import Transaction
 from app.audit.logger import log_audit_event
-from app.engines.diagnosis.engine import diagnosis_engine
-from app.engines.policy.engine import policy_engine
 
 router = APIRouter()
 
@@ -136,9 +134,16 @@ async def abandon_checkout(checkout_id: str, req: CheckoutAbandonRequest, db = D
     txn_data["_id"] = txn_data.pop("id")
     await db["transactions"].replace_one({"_id": txn.id}, txn_data)
 
-    # Trigger Diagnosis Engine -> Policy Engine for Checkout Abandonment
-    diag = await diagnosis_engine.diagnose_transaction(txn.id, error_code=None)
-    await policy_engine.evaluate_policy(txn.id, diag["root_cause"])
+    # Trigger Recovery Service in background
+    from app.services.recovery_service import recovery_service
+    import asyncio
+    task = asyncio.create_task(
+        recovery_service.process_checkout_abandonment(
+            txn.id,
+            fast_mode=True
+        )
+    )
+    recovery_service.track_task(task)
 
     # 3. Log Audit Event
     await log_audit_event(

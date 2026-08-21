@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 from httpx import AsyncClient
 from app.main import app
 
@@ -64,9 +65,13 @@ async def test_checkout_and_simulated_payment_failure_flow(db):
         assert att_data["success"] is False
         assert att_data["error"]["reason"] == "gateway_timeout"
 
-        # Verify state is now GUARDRAIL_CHECK
+        # Wait for all background tasks to complete before assertions
+        from app.services.recovery_service import recovery_service
+        await recovery_service.wait_for_pending_tasks()
+
+        # Verify state is now RECOVERED (auto-retry completed)
         txn_doc = await db["transactions"].find_one({"_id": txn_id})
-        assert txn_doc["status"] == "GUARDRAIL_CHECK"
+        assert txn_doc["status"] == "RECOVERED"
 
         # Verify diagnosis and recovery actions are created in MongoDB
         diag_doc = await db["diagnoses"].find_one({"transaction_id": txn_id})
@@ -77,9 +82,9 @@ async def test_checkout_and_simulated_payment_failure_flow(db):
         assert action_doc is not None
         assert action_doc["action_type"] == "RETRY_PAYMENT"
 
-        # Verify payment attempts count
+        # Verify payment attempts count: 1 failed, 1 success (retry)
         attempts_count = await db["payment_attempts"].count_documents({"transaction_id": txn_id})
-        assert attempts_count == 1
+        assert attempts_count == 2
 
         # Verify audit logs
         failed_audit = await db["audit_events"].find_one({"transaction_id": txn_id, "event_type": "PAYMENT_FAILED"})
@@ -124,9 +129,13 @@ async def test_manual_checkout_abandonment(db):
         ab_data = res_ab.json()
         assert ab_data["success"] is True
         
-        # Verify transaction status updated to GUARDRAIL_CHECK
+        # Wait for all background tasks to complete before assertions
+        from app.services.recovery_service import recovery_service
+        await recovery_service.wait_for_pending_tasks()
+
+        # Verify transaction status updated to RECOVERED (customer clicked nudge link and paid)
         txn_doc = await db["transactions"].find_one({"_id": txn_id})
-        assert txn_doc["status"] == "GUARDRAIL_CHECK"
+        assert txn_doc["status"] == "RECOVERED"
 
         # Verify checkout status updated to CHECKOUT_ABANDONED
         chk_doc = await db["checkouts"].find_one({"_id": chk_id})

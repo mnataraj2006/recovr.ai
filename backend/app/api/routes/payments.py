@@ -6,8 +6,6 @@ from pydantic import BaseModel, Field
 from app.db.connection import get_db
 from app.models.transaction import Transaction
 from app.audit.logger import log_audit_event
-from app.engines.diagnosis.engine import diagnosis_engine
-from app.engines.policy.engine import policy_engine
 
 router = APIRouter()
 
@@ -204,9 +202,18 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
         txn_data["_id"] = txn_data.pop("id")
         await db["transactions"].replace_one({"_id": txn.id}, txn_data)
         
-        # Trigger Diagnosis Engine -> Policy Engine
-        diag = await diagnosis_engine.diagnose_transaction(txn.id, error_code=outcome)
-        await policy_engine.evaluate_policy(txn.id, diag["root_cause"])
+        # Trigger Recovery Service in background
+        from app.services.recovery_service import recovery_service
+        import asyncio
+        task = asyncio.create_task(
+            recovery_service.process_failed_payment(
+                txn.id,
+                error_code=outcome,
+                error_description=error_details["description"],
+                fast_mode=True
+            )
+        )
+        recovery_service.track_task(task)
         
         # Update payment status
         await db["payments"].update_one({"_id": req.payment_id}, {"$set": {"status": "failed"}})
