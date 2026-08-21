@@ -74,11 +74,11 @@ class GuardrailEngine:
                 "transaction_id": txn_id,
                 "status": "Failed"
             })
-            retry_ok = failed_attempts < 2
+            retry_ok = failed_attempts < 3
             checks.append({"name": "retry_limit", "passed": retry_ok})
             if not retry_ok:
                 allowed = False
-                block_reason = f"Payment retry cap (2 attempts) exceeded. Current failed attempts: {failed_attempts}."
+                block_reason = f"Payment retry cap (3 total attempts) exceeded. Current failed attempts: {failed_attempts}."
 
         # --- Check 4: Nudge Limit Check ---
         if allowed and action_type == "NUDGE_CUSTOMER":

@@ -154,7 +154,7 @@ class SimulationRunner:
             pay_id = res_pay.json()["payment_id"]
             
             db = await get_db()
-            for i in range(2):
+            for i in range(3):
                 await db["payment_attempts"].insert_one({
                     "_id": f"att_sim_{uuid.uuid4().hex[:8]}",
                     "transaction_id": txn_id,

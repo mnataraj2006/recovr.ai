@@ -21,6 +21,7 @@ class CheckoutCreateRequest(BaseModel):
     cart_value: float
     items: List[CheckoutItem] = Field(default_factory=list)
     device_info: Dict[str, Any] = Field(default_factory=dict)
+    simulated_outcomes: Optional[List[str]] = Field(default=None, description="Optional sequence of simulated outcomes")
 
 class CheckoutAbandonRequest(BaseModel):
     checkout_duration_seconds: float
@@ -66,7 +67,8 @@ async def create_checkout(req: CheckoutCreateRequest, db = Depends(get_db)):
         checkout_id=checkout_id,
         customer_id=customer_id,
         amount=req.cart_value,
-        status="CREATED"
+        status="CREATED",
+        simulated_outcomes=req.simulated_outcomes
     )
 
     # Transition to CHECKOUT_INITIATED

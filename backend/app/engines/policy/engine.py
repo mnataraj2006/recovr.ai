@@ -67,9 +67,9 @@ class PolicyEngine:
         txn_doc["id"] = txn_doc.pop("_id")
         txn = Transaction(**txn_doc)
         
-        # Verify transaction status is DIAGNOSED
-        if txn.status != "DIAGNOSED":
-            raise ValueError(f"Transaction {transaction_id} is in status {txn.status}, not DIAGNOSED.")
+        # Verify transaction status is DIAGNOSED or ACTION_PROPOSED
+        if txn.status not in ["DIAGNOSED", "ACTION_PROPOSED"]:
+            raise ValueError(f"Transaction {transaction_id} is in status {txn.status}, not DIAGNOSED or ACTION_PROPOSED.")
 
         # 2. Lookup policy mappings
         cause_upper = root_cause.upper()

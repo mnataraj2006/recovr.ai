@@ -196,8 +196,9 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
         
         error_details = OUTCOME_ERRORS[outcome]
         
-        # Transition state: -> DIAGNOSING
-        txn.transition_to("DIAGNOSING")
+        # Transition state: -> DIAGNOSING (attempt 1) or RETRY_ESCALATE (attempt > 1)
+        next_state = "DIAGNOSING" if attempt_number == 1 else "RETRY_ESCALATE"
+        txn.transition_to(next_state)
         txn_data = txn.model_dump()
         txn_data["_id"] = txn_data.pop("id")
         await db["transactions"].replace_one({"_id": txn.id}, txn_data)

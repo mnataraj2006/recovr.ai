@@ -16,7 +16,7 @@ TRANSACTION_STATES = {
     "GUARDRAIL_CHECK",
     "APPROVED",
     "BLOCKED",
-    "EXECUTED",
+    "EXECUTING",
     "RETRY_ESCALATE",
     "UNRECOVERABLE"
 }
@@ -25,16 +25,16 @@ TRANSACTION_STATES = {
 VALID_TRANSITIONS: Dict[str, Set[str]] = {
     "CREATED": {"CHECKOUT_INITIATED"},
     "CHECKOUT_INITIATED": {"PAYMENT_ATTEMPTED", "CHECKOUT_ABANDONED"},
-    "PAYMENT_ATTEMPTED": {"SUCCESS", "DIAGNOSING"},
+    "PAYMENT_ATTEMPTED": {"SUCCESS", "DIAGNOSING", "RETRY_ESCALATE"},
     "CHECKOUT_ABANDONED": {"DIAGNOSING"},
     "SUCCESS": {"RECOVERED"},
     "DIAGNOSING": {"DIAGNOSED"},
     "DIAGNOSED": {"ACTION_PROPOSED"},
     "ACTION_PROPOSED": {"GUARDRAIL_CHECK"},
     "GUARDRAIL_CHECK": {"APPROVED", "BLOCKED", "UNRECOVERABLE"},
-    "APPROVED": {"EXECUTED"},
+    "APPROVED": {"EXECUTING"},
     "BLOCKED": {"UNRECOVERABLE"},
-    "EXECUTED": {"RECOVERED", "RETRY_ESCALATE", "PAYMENT_ATTEMPTED"},
+    "EXECUTING": {"PAYMENT_ATTEMPTED", "RECOVERED"},
     "RETRY_ESCALATE": {"ACTION_PROPOSED", "UNRECOVERABLE"},
     "RECOVERED": set(),      # Terminal
     "UNRECOVERABLE": set(),  # Terminal
@@ -60,6 +60,7 @@ class Transaction(BaseModel):
     payment_method: Optional[str] = Field(default=None)
     root_cause_id: Optional[str] = Field(default=None, description="Reference ID to Diagnosis")
     last_attempt_id: Optional[str] = Field(default=None, description="Reference ID to last PaymentAttempt")
+    simulated_outcomes: Optional[list[str]] = Field(default=None, description="Optional sequence of simulated outcomes")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

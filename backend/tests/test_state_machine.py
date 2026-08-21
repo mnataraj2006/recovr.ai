@@ -48,11 +48,15 @@ def test_valid_state_transitions():
     txn.transition_to("APPROVED")
     assert txn.status == "APPROVED"
 
-    # APPROVED -> EXECUTED
-    txn.transition_to("EXECUTED")
-    assert txn.status == "EXECUTED"
+    # APPROVED -> EXECUTING
+    txn.transition_to("EXECUTING")
+    assert txn.status == "EXECUTING"
 
-    # EXECUTED -> RETRY_ESCALATE
+    # EXECUTING -> PAYMENT_ATTEMPTED
+    txn.transition_to("PAYMENT_ATTEMPTED")
+    assert txn.status == "PAYMENT_ATTEMPTED"
+
+    # PAYMENT_ATTEMPTED -> RETRY_ESCALATE
     txn.transition_to("RETRY_ESCALATE")
     assert txn.status == "RETRY_ESCALATE"
 

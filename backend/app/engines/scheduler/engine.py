@@ -26,6 +26,11 @@ class RetryScheduler:
         if not action_doc:
             raise ValueError(f"Recovery action {action_id} not found.")
             
+        # Idempotency check: if action has already run or is running
+        if action_doc.get("status") in ["EXECUTING", "SUCCESS", "FAILED", "BLOCKED"]:
+            logger.warning(f"Scheduler: Recovery action {action_id} already processed. status={action_doc.get('status')}")
+            return 0.0
+            
         txn_id = action_doc["transaction_id"]
         
         # 2. Fetch Transaction
@@ -53,8 +58,8 @@ class RetryScheduler:
             jitter = random.uniform(-2.0, 2.0)
             delay = max(0.1, base + jitter)
             
-        # 5. Transition transaction status: APPROVED -> EXECUTED
-        txn.transition_to("EXECUTED")
+        # 5. Transition transaction status: APPROVED -> EXECUTING
+        txn.transition_to("EXECUTING")
         txn_data = txn.model_dump()
         txn_data["_id"] = txn_data.pop("id")
         await db["transactions"].replace_one({"_id": txn_id}, txn_data)
@@ -90,7 +95,7 @@ class RetryScheduler:
             
             # double check transaction state before initiating retry charge
             txn_doc = await db["transactions"].find_one({"_id": transaction_id})
-            if not txn_doc or txn_doc["status"] != "EXECUTED":
+            if not txn_doc or txn_doc["status"] != "EXECUTING":
                 logger.warning(f"Scheduler: Bypassing retry execution. Transaction {transaction_id} is in status {txn_doc.get('status') if txn_doc else 'deleted'}")
                 return
 
@@ -106,8 +111,20 @@ class RetryScheduler:
             res_create = await create_payment_intent(create_req, db)
             payment_id = res_create["payment_id"]
             
-            # Step B: Attempt Authorization (force SUCCESS to recover)
-            attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome="SUCCESS")
+            # Fetch failed attempts count to dynamically check the simulated outcomes
+            failed_attempts = await db["payment_attempts"].count_documents({
+                "transaction_id": transaction_id,
+                "status": "Failed"
+            })
+            
+            # Step B: Attempt Authorization
+            outcome = "SUCCESS"
+            if txn_doc.get("simulated_outcomes"):
+                outcomes = txn_doc["simulated_outcomes"]
+                if failed_attempts < len(outcomes):
+                    outcome = outcomes[failed_attempts]
+                    
+            attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome=outcome)
             res_att = await attempt_payment(attempt_req, db)
             
             if res_att.get("success"):

@@ -46,18 +46,29 @@ class RecoveryService:
             from app.models.transaction import Transaction
             txn = Transaction(**txn_doc)
             
-            # Transition to DIAGNOSING if not already there
-            if txn.status != "DIAGNOSING":
-                txn.transition_to("DIAGNOSING")
+            # Transition to DIAGNOSING or ACTION_PROPOSED based on state
+            if txn.status == "RETRY_ESCALATE":
+                txn.transition_to("ACTION_PROPOSED")
                 txn_data = txn.model_dump()
                 txn_data["_id"] = txn_data.pop("id")
                 await db["transactions"].replace_one({"_id": transaction_id}, txn_data)
-
-            # 1. Run Diagnosis Engine (DIAGNOSING -> DIAGNOSED)
-            diag = await diagnosis_engine.diagnose_transaction(transaction_id, error_code=error_code)
+                
+                # Retrieve existing diagnosis
+                diag_doc = await db["diagnoses"].find_one({"transaction_id": transaction_id})
+                root_cause = diag_doc["root_cause"] if diag_doc else "UNKNOWN_GATEWAY_ERROR"
+            else:
+                if txn.status != "DIAGNOSING":
+                    txn.transition_to("DIAGNOSING")
+                    txn_data = txn.model_dump()
+                    txn_data["_id"] = txn_data.pop("id")
+                    await db["transactions"].replace_one({"_id": transaction_id}, txn_data)
+                
+                # 1. Run Diagnosis Engine (DIAGNOSING -> DIAGNOSED)
+                diag = await diagnosis_engine.diagnose_transaction(transaction_id, error_code=error_code)
+                root_cause = diag["root_cause"]
             
             # 2. Run Policy Engine (DIAGNOSED -> ACTION_PROPOSED -> GUARDRAIL_CHECK)
-            action = await policy_engine.evaluate_policy(transaction_id, diag["root_cause"])
+            action = await policy_engine.evaluate_policy(transaction_id, root_cause)
             
             # 3. Run Guardrail Engine (GUARDRAIL_CHECK -> APPROVED / BLOCKED)
             decision = await guardrail_engine.verify_action(action["id"], skip_cooldown_for_test=fast_mode)
@@ -133,9 +144,9 @@ class RecoveryService:
         from app.models.transaction import Transaction
         txn = Transaction(**txn_doc)
         
-        # Transition transaction state: APPROVED -> EXECUTED -> RECOVERED
+        # Transition transaction state: APPROVED -> EXECUTING -> RECOVERED
         # (For SMS/WhatsApp we assume successful recovery completion inside the simulation)
-        txn.transition_to("EXECUTED")
+        txn.transition_to("EXECUTING")
         txn.transition_to("RECOVERED")
         
         txn_data = txn.model_dump()
