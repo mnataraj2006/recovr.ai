@@ -190,10 +190,22 @@ async def list_transactions(status: Optional[str] = None, limit: int = 20, offse
     if status:
         query["status"] = status
     
-    cursor = db["transactions"].find(query).skip(offset).limit(limit)
+    cursor = db["transactions"].find(query).sort("created_at", -1).skip(offset).limit(limit)
     transactions = []
     async for doc in cursor:
         doc["id"] = doc.pop("_id")
+        
+        # Inline lookup for customer details
+        cust = await db["customers"].find_one({"_id": doc["customer_id"]})
+        if cust:
+            doc["customer_name"] = cust["name"]
+            doc["customer_email"] = cust["email"]
+            doc["customer_phone"] = cust["phone"]
+        else:
+            doc["customer_name"] = "Unknown Customer"
+            doc["customer_email"] = ""
+            doc["customer_phone"] = ""
+            
         transactions.append(doc)
         
     total = await db["transactions"].count_documents(query)

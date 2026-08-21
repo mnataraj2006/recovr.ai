@@ -1,6 +1,8 @@
+import os
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
 from app.config.settings import settings
 from app.db.connection import db_connection, get_db
 
@@ -56,3 +58,8 @@ async def health_check(db = Depends(get_db)):
         "environment": settings.ENVIRONMENT,
         "database": db_status
     }
+
+# Serve static frontend files if built
+frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="static")
