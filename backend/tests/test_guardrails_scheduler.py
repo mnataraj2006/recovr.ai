@@ -290,7 +290,7 @@ async def test_successful_initial_payment_flow(db):
         assert res_att.json()["success"] is True
         
         txn_doc = await db["transactions"].find_one({"_id": txn_id})
-        assert txn_doc["status"] == "RECOVERED"
+        assert txn_doc["status"] == "SUCCESS"
         
         attempts_count = await db["payment_attempts"].count_documents({"transaction_id": txn_id})
         assert attempts_count == 1

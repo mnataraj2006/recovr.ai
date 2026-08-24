@@ -61,6 +61,7 @@ class Transaction(BaseModel):
     root_cause_id: Optional[str] = Field(default=None, description="Reference ID to Diagnosis")
     last_attempt_id: Optional[str] = Field(default=None, description="Reference ID to last PaymentAttempt")
     simulated_outcomes: Optional[list[str]] = Field(default=None, description="Optional sequence of simulated outcomes")
+    customer_response: Optional[str] = Field(default=None, description="Optional customer response preference ('RETURNS' or 'DOES_NOT_RETURN')")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

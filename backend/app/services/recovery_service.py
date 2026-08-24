@@ -135,27 +135,37 @@ class RecoveryService:
         """Simulates customer receiving a nudge notification, clicking it, and executing payment."""
         db = await get_db()
         
-        # 1. Update recovery action status: -> EXECUTING (simulating message delivery)
-        await db["recovery_actions"].update_one(
-            {"_id": action_id},
-            {"$set": {"status": "EXECUTING", "executed_at": datetime.now(timezone.utc)}}
-        )
-        
-        # 2. Load transaction
+        # 1. Load transaction
         txn_doc = await db["transactions"].find_one({"_id": transaction_id})
         if not txn_doc:
             logger.error(f"RecoveryService: Transaction {transaction_id} not found for nudge.")
             return
-            
+
+        # Return if transaction is already in terminal successful state
+        if txn_doc.get("status") in ["RECOVERED", "SUCCESS"]:
+            return
+
+        # Check idempotency: Return if action already processed
+        act_doc = await db["recovery_actions"].find_one({"_id": action_id})
+        if act_doc and act_doc.get("status") in ["SUCCESS", "FAILED", "NO_RESPONSE"]:
+            return
+
+        # Update recovery action status: -> EXECUTING (simulating message delivery)
+        await db["recovery_actions"].update_one(
+            {"_id": action_id},
+            {"$set": {"status": "EXECUTING", "executed_at": datetime.now(timezone.utc)}}
+        )
+
         txn_doc["id"] = txn_doc.pop("_id")
         from app.models.transaction import Transaction
         txn = Transaction(**txn_doc)
         
         # 3. Transition transaction state: APPROVED -> EXECUTING
-        txn.transition_to("EXECUTING")
-        txn_data = txn.model_dump()
-        txn_data["_id"] = txn_data.pop("id")
-        await db["transactions"].replace_one({"_id": transaction_id}, txn_data)
+        if txn.status not in ["EXECUTING", "RECOVERED", "SUCCESS"]:
+            txn.transition_to("EXECUTING")
+            txn_data = txn.model_dump()
+            txn_data["_id"] = txn_data.pop("id")
+            await db["transactions"].replace_one({"_id": transaction_id}, txn_data)
         
         await log_audit_event(
             transaction_id=transaction_id,
@@ -166,6 +176,30 @@ class RecoveryService:
             metadata={"action_id": action_id}
         )
         
+        # Determine customer response
+        cust_response = (
+            txn_doc.get("customer_response") or 
+            txn_doc.get("simulated_customer_response") or 
+            "RETURNS"
+        )
+        cust_response = str(cust_response).upper()
+        
+        if cust_response in ["DOES_NOT_RETURN", "NO_RETURN", "EXPIRED", "FALSE"]:
+            await log_audit_event(
+                transaction_id=transaction_id,
+                event_type="CUSTOMER_DID_NOT_RETURN",
+                actor="CUSTOMER",
+                source="RecoveryService",
+                reason="Customer received nudge but did not return to checkout.",
+                metadata={"action_id": action_id}
+            )
+            await db["recovery_actions"].update_one(
+                {"_id": action_id},
+                {"$set": {"status": "NO_RESPONSE"}}
+            )
+            return
+
+        # Customer returned
         await log_audit_event(
             transaction_id=transaction_id,
             event_type="CUSTOMER_RETURNED_TO_CHECKOUT",
@@ -175,10 +209,9 @@ class RecoveryService:
             metadata={"action_id": action_id}
         )
         
-        # 4. Determine alternative payment method if insufficient funds
+        # 4. Determine payment method
         diag_doc = await db["diagnoses"].find_one({"transaction_id": transaction_id})
         root_cause = diag_doc["root_cause"] if diag_doc else "UNKNOWN_ABANDONMENT"
-        
         payment_method = "wallet" if root_cause == "INSUFFICIENT_FUNDS" else (txn.payment_method or "upi")
         
         # 5. Create Payment Intent (transitions EXECUTING -> PAYMENT_ATTEMPTED)
@@ -192,8 +225,10 @@ class RecoveryService:
         outcome = None
         if txn_doc.get("simulated_outcomes"):
             outcomes = txn_doc["simulated_outcomes"]
-            if prev_attempts < len(outcomes):
-                outcome = outcomes[prev_attempts]
+            # Look up attempt index (excluding the newly created one if already created)
+            attempt_idx = max(0, prev_attempts - 1)
+            if attempt_idx < len(outcomes):
+                outcome = outcomes[attempt_idx]
         
         # 7. Attempt simulated payment
         attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome=outcome)

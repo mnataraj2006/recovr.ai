@@ -155,9 +155,23 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
     outcome = outcome.upper()
 
     if outcome == "SUCCESS":
-        # Transition state: -> SUCCESS -> RECOVERED (Wait, standard flow sets to SUCCESS first)
+        action_count = await db["recovery_actions"].count_documents({"transaction_id": txn.id})
+        diagnosis_count = await db["diagnoses"].count_documents({"transaction_id": txn.id})
+        prev_failed_count = await db["payment_attempts"].count_documents({"transaction_id": txn.id, "status": "Failed"})
+        
+        is_at_risk = (
+            txn.status in ["CHECKOUT_ABANDONED", "DIAGNOSING", "DIAGNOSED", "ACTION_PROPOSED", 
+                           "GUARDRAIL_CHECK", "APPROVED", "BLOCKED", "EXECUTING", 
+                           "RETRY_ESCALATE", "UNRECOVERABLE"] or
+            attempt_number > 1 or
+            prev_failed_count > 0 or
+            action_count > 0 or
+            diagnosis_count > 0
+        )
+        
         txn.transition_to("SUCCESS")
-        txn.transition_to("RECOVERED")
+        if is_at_risk:
+            txn.transition_to("RECOVERED")
         
         txn_data = txn.model_dump()
         txn_data["_id"] = txn_data.pop("id")

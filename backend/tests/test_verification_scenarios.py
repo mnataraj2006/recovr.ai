@@ -28,7 +28,7 @@ async def test_scenario_1_successful_initial_payment(db):
         assert res_att.json()["success"] is True
         
         txn_doc = await db["transactions"].find_one({"_id": txn_id})
-        assert txn_doc["status"] == "RECOVERED"
+        assert txn_doc["status"] == "SUCCESS"
         
         attempts = await db["payment_attempts"].find({"transaction_id": txn_id}).to_list(length=10)
         assert len(attempts) == 1

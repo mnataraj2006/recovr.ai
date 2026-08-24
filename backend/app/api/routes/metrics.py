@@ -33,6 +33,7 @@ async def get_metrics(db = Depends(get_db)):
         t_id = t["_id"]
         status = t["status"]
         if (status in at_risk_statuses or 
+            status == "RECOVERED" or
             t_id in failed_txn_ids or 
             t_id in action_txn_ids or 
             t_id in diagnosis_txn_ids):
@@ -41,20 +42,32 @@ async def get_metrics(db = Depends(get_db)):
     at_risk_transactions = len(at_risk_txns)
     revenue_at_risk = sum(t["amount"] for t in at_risk_txns)
     
-    # 4. Identify genuinely RECOVERED transactions
-    # Must be in at_risk_txns, have status RECOVERED (or SUCCESS after failure),
-    # AND have a matching successful payment attempt in payment_attempts
+    # 4. Identify genuinely RECOVERED transactions & integrity checks
     success_txn_ids = set(await db["payment_attempts"].distinct("transaction_id", {"status": "Success"}))
+    at_risk_ids = set(t["_id"] for t in at_risk_txns)
     
     recovered_txns = []
-    for t in at_risk_txns:
+    invalid_recovered_txns = []
+    
+    for t in all_txns:
         t_id = t["_id"]
         status = t["status"]
-        if status == "RECOVERED" or (status == "SUCCESS" and t_id in success_txn_ids):
-            recovered_txns.append(t)
-            
+        if status == "RECOVERED":
+            if t_id in success_txn_ids and t_id in at_risk_ids:
+                recovered_txns.append(t)
+            else:
+                invalid_recovered_txns.append(t)
+        elif status == "SUCCESS":
+            if t_id in at_risk_ids and t_id in success_txn_ids:
+                recovered_txns.append(t)
+                
     recovered_transactions = len(recovered_txns)
+    invalid_recovered_transactions = len(invalid_recovered_txns)
     recovered_revenue = sum(t["amount"] for t in recovered_txns)
+    
+    # Calculate normal initial success revenue (non-at-risk SUCCESS transactions)
+    normal_success_txns = [t for t in all_txns if t["_id"] not in at_risk_ids and t["status"] == "SUCCESS"]
+    normal_success_revenue = sum(t["amount"] for t in normal_success_txns)
     
     # 5. Recovery Rates (ratios: 0.0 to 1.0)
     transaction_recovery_rate = (recovered_transactions / at_risk_transactions) if at_risk_transactions > 0 else 0.0
@@ -92,11 +105,13 @@ async def get_metrics(db = Depends(get_db)):
         "total_transactions": total_transactions,
         "at_risk_transactions": at_risk_transactions,
         "recovered_transactions": recovered_transactions,
+        "invalid_recovered_transactions": invalid_recovered_transactions,
         "total_transaction_value": total_transaction_value,
         "total_revenue_at_risk": revenue_at_risk,
         "revenue_at_risk": revenue_at_risk,
         "total_recovered_revenue": recovered_revenue,
         "recovered_revenue": recovered_revenue,
+        "normal_success_revenue": normal_success_revenue,
         "net_recovered_revenue": net_recovered_revenue,
         "recovery_rate": transaction_recovery_rate,
         "transaction_recovery_rate": transaction_recovery_rate,

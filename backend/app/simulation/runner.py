@@ -11,51 +11,53 @@ logger = logging.getLogger(__name__)
 
 COHORT_PROFILES = [
     {
-        "name": "Arjun Sharma",
-        "email": "arjun.sharma@example.com",
-        "phone": "+919988877666",
-        "amount": 4200.0,
+        "name": "Transaction 1 - Initial Success",
+        "email": "txn1@example.com",
+        "phone": "+919000000001",
+        "amount": 1000.0,
+        "failure_mode": "SUCCESS",
+        "simulated_outcomes": ["SUCCESS"]
+    },
+    {
+        "name": "Transaction 2 - Gateway Timeout Recovered",
+        "email": "txn2@example.com",
+        "phone": "+919000000002",
+        "amount": 2000.0,
         "failure_mode": "GATEWAY_TIMEOUT",
         "simulated_outcomes": ["GATEWAY_TIMEOUT", "SUCCESS"]
     },
     {
-        "name": "Priya Patel",
-        "email": "priya.patel@example.com",
-        "phone": "+919876543219",
-        "amount": 1500.0,
-        "failure_mode": "INSUFFICIENT_FUNDS",
-        "simulated_outcomes": ["INSUFFICIENT_FUNDS", "SUCCESS"]
-    },
-    {
-        "name": "Rohan Das",
-        "email": "rohan.das@example.com",
-        "phone": "+919555512345",
-        "amount": 750.0,
-        "failure_mode": "ABANDON",
-        "simulated_outcomes": ["SUCCESS"]
-    },
-    {
-        "name": "Sneha Reddy",
-        "email": "sneha.reddy@example.com",
-        "phone": "+919222233333",
-        "amount": 5500.0,
-        "failure_mode": "OTP_FAILURE",
-        "simulated_outcomes": ["OTP_FAILURE", "SUCCESS"]
-    },
-    {
-        "name": "Vikram Singh",
-        "email": "vikram.singh@example.com",
-        "phone": "+919111122222",
-        "amount": 3200.0,
+        "name": "Transaction 3 - Gateway Timeout Unrecoverable",
+        "email": "txn3@example.com",
+        "phone": "+919000000003",
+        "amount": 3000.0,
         "failure_mode": "DOUBLE_ATTEMPT_BLOCK",
         "simulated_outcomes": ["GATEWAY_TIMEOUT", "GATEWAY_TIMEOUT", "GATEWAY_TIMEOUT", "GATEWAY_TIMEOUT"]
+    },
+    {
+        "name": "Transaction 4 - Abandoned Customer Does Not Return",
+        "email": "txn4@example.com",
+        "phone": "+919000000004",
+        "amount": 4000.0,
+        "failure_mode": "ABANDON_NO_RETURN",
+        "customer_response": "DOES_NOT_RETURN",
+        "simulated_outcomes": []
+    },
+    {
+        "name": "Transaction 5 - Abandoned Customer Returns & Pays",
+        "email": "txn5@example.com",
+        "phone": "+919000000005",
+        "amount": 5000.0,
+        "failure_mode": "ABANDON",
+        "customer_response": "RETURNS",
+        "simulated_outcomes": ["SUCCESS"]
     }
 ]
 
 class SimulationRunner:
     async def run_batch_cohort(self, seed: Optional[int] = 42) -> dict:
         """
-        Runs an asynchronous batch simulation for a cohort of 5 customers,
+        Runs an asynchronous batch simulation for a deterministic cohort of 5 customers,
         evaluates all recovery flows concurrently, and aggregates results.
         """
         if seed is not None:
@@ -79,21 +81,51 @@ class SimulationRunner:
             # Wait for all background recovery orchestrations to finish writing
             await recovery_service.wait_for_pending_tasks()
             
-            # 3. Fetch outcomes and calculate metrics
+            # 3. Fetch outcomes and calculate metrics from actual DB records
             txn_ids = [res["transaction_id"] for res in results if isinstance(res, dict) and "transaction_id" in res]
             
             cohort_txns = await db["transactions"].find({"_id": {"$in": txn_ids}}).to_list(length=10)
             cohort_actions = await db["recovery_actions"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
             cohort_decisions = await db["guardrail_decisions"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
-            at_risk_transactions = len(cohort_txns)
-            recovered_txns = [t for t in cohort_txns if t["status"] in ["RECOVERED", "SUCCESS"]]
-            recovered_transactions = len(recovered_txns)
             
-            total_revenue_at_risk = sum(t["amount"] for t in cohort_txns)
-            total_recovered_revenue = sum(t["amount"] for t in recovered_txns)
+            total_transactions = len(cohort_txns)
+            total_transaction_value = sum(t["amount"] for t in cohort_txns)
+            
+            at_risk_statuses = [
+                "CHECKOUT_ABANDONED", "DIAGNOSING", "DIAGNOSED", "ACTION_PROPOSED", 
+                "GUARDRAIL_CHECK", "APPROVED", "BLOCKED", "EXECUTING", 
+                "RETRY_ESCALATE", "UNRECOVERABLE"
+            ]
+            cohort_diagnoses = await db["diagnoses"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
+            cohort_attempts = await db["payment_attempts"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=50)
+            
+            action_txn_ids = set(a["transaction_id"] for a in cohort_actions)
+            diagnosis_txn_ids = set(d["transaction_id"] for d in cohort_diagnoses)
+            failed_txn_ids = set(p["transaction_id"] for p in cohort_attempts if p.get("status") == "Failed")
+            success_txn_ids = set(p["transaction_id"] for p in cohort_attempts if p.get("status") == "Success")
+            
+            at_risk_txns = []
+            for t in cohort_txns:
+                t_id = t["_id"]
+                status = t["status"]
+                if (status in at_risk_statuses or 
+                    status == "RECOVERED" or
+                    t_id in failed_txn_ids or 
+                    t_id in action_txn_ids or 
+                    t_id in diagnosis_txn_ids):
+                    at_risk_txns.append(t)
+            at_risk_transactions = len(at_risk_txns)
+            revenue_at_risk = sum(t["amount"] for t in at_risk_txns)
+            
+            recovered_txns = [t for t in at_risk_txns if t["status"] == "RECOVERED" or (t["status"] == "SUCCESS" and t["_id"] in success_txn_ids)]
+            recovered_transactions = len(recovered_txns)
+            recovered_revenue = sum(t["amount"] for t in recovered_txns)
+            
+            normal_success_txns = [t for t in cohort_txns if t not in at_risk_txns and t["status"] == "SUCCESS"]
+            normal_success_revenue = sum(t["amount"] for t in normal_success_txns)
             
             transaction_recovery_rate = (recovered_transactions / at_risk_transactions) if at_risk_transactions > 0 else 0.0
-            revenue_recovery_rate = (total_recovered_revenue / total_revenue_at_risk) if total_revenue_at_risk > 0 else 0.0
+            revenue_recovery_rate = (recovered_revenue / revenue_at_risk) if revenue_at_risk > 0 else 0.0
             
             # Recovery Costs
             total_recovery_cost = 0.0
@@ -114,8 +146,8 @@ class SimulationRunner:
                     else:
                         total_recovery_cost += 0.50
                         
-            net_recovered_revenue = total_recovered_revenue - total_recovery_cost
-            roi = ((total_recovered_revenue - total_recovery_cost) / total_recovery_cost) if total_recovery_cost > 0 else 0.0
+            net_recovered_revenue = recovered_revenue - total_recovery_cost
+            roi = ((recovered_revenue - total_recovery_cost) / total_recovery_cost) if total_recovery_cost > 0 else 0.0
             
             cohort_summary = []
             for t in cohort_txns:
@@ -138,13 +170,16 @@ class SimulationRunner:
             report = {
                 "_id": simulation_id,
                 "created_at": datetime.now(timezone.utc),
+                "total_transactions": total_transactions,
                 "at_risk_transactions": at_risk_transactions,
                 "recovered_transactions": recovered_transactions,
                 "transaction_recovery_rate": transaction_recovery_rate,
-                "total_revenue_at_risk": total_revenue_at_risk,
-                "revenue_at_risk": total_revenue_at_risk,
-                "total_recovered_revenue": total_recovered_revenue,
-                "recovered_revenue": total_recovered_revenue,
+                "total_transaction_value": total_transaction_value,
+                "total_revenue_at_risk": revenue_at_risk,
+                "revenue_at_risk": revenue_at_risk,
+                "total_recovered_revenue": recovered_revenue,
+                "recovered_revenue": recovered_revenue,
+                "normal_success_revenue": normal_success_revenue,
                 "revenue_recovery_rate": revenue_recovery_rate,
                 "net_recovered_revenue": net_recovered_revenue,
                 "recovery_rate": transaction_recovery_rate,
@@ -177,7 +212,7 @@ class SimulationRunner:
         chk_id = chk_data["checkout_id"]
         
         # Step 2: Handle checkout abandonment vs payment failure modes
-        if profile["failure_mode"] == "ABANDON":
+        if profile["failure_mode"] in ["ABANDON", "ABANDON_NO_RETURN"]:
             abandon_payload = {
                 "checkout_duration_seconds": 180.0,
                 "last_viewed_step": "shipping",

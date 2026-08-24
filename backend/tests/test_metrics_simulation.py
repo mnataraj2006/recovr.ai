@@ -24,6 +24,12 @@ async def test_metrics_engine_calculations(db):
         "status": "UNRECOVERABLE",
         "created_at": "2026-08-21T00:00:00Z"
     })
+    await db["payment_attempts"].insert_one({
+        "_id": "att_rec_1",
+        "transaction_id": "txn_recovered_1",
+        "attempt_number": 2,
+        "status": "Success"
+    })
     
     # Seed recovery actions to verify cost calculations (1 nudge, 1 retry)
     await db["recovery_actions"].insert_one({

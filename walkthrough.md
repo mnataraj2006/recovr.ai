@@ -74,17 +74,19 @@ Created a glassmorphic React dashboard displaying transactions, charts, and chro
 ---
 
 ## Verification & Test Execution Results
-All **33 unit and integration tests passed successfully** against the local MongoDB instance:
+All **44 unit and integration tests passed successfully** against the local MongoDB instance:
 ```text
-tests\test_database.py ...                                               [  9%]
-tests\test_diagnosis_policy.py ..                                        [ 15%]
-tests\test_guardrails_scheduler.py ........                              [ 39%]
-tests\test_ingestion.py ..                                               [ 45%]
-tests\test_metrics_simulation.py ...                                     [ 54%]
-tests\test_state_machine.py ....                                         [ 66%]
+tests\test_database.py ...                                               [  6%]
+tests\test_diagnosis_policy.py ..                                        [ 11%]
+tests\test_final_correctness_invariants.py .......                       [ 27%]
+tests\test_guardrails_scheduler.py ........                              [ 45%]
+tests\test_ingestion.py ..                                               [ 50%]
+tests\test_metrics_guardrails_correction.py ....                         [ 59%]
+tests\test_metrics_simulation.py ...                                     [ 65%]
+tests\test_state_machine.py ....                                         [ 75%]
 tests\test_verification_scenarios.py ...........                         [100%]
 
-====================== 33 passed, 20 warnings in 12.93s =======================
+====================== 44 passed, 28 warnings in 17.01s =======================
 ```
 
 ---

@@ -22,6 +22,7 @@ class CheckoutCreateRequest(BaseModel):
     items: List[CheckoutItem] = Field(default_factory=list)
     device_info: Dict[str, Any] = Field(default_factory=dict)
     simulated_outcomes: Optional[List[str]] = Field(default=None, description="Optional sequence of simulated outcomes")
+    customer_response: Optional[str] = Field(default=None, description="Optional customer response preference ('RETURNS' or 'DOES_NOT_RETURN')")
 
 class CheckoutAbandonRequest(BaseModel):
     checkout_duration_seconds: float
@@ -76,6 +77,8 @@ async def create_checkout(req: CheckoutCreateRequest, db = Depends(get_db)):
     
     txn_doc = txn.model_dump()
     txn_doc["_id"] = txn_doc.pop("id")
+    if req.customer_response:
+        txn_doc["customer_response"] = req.customer_response
     await db["transactions"].insert_one(txn_doc)
 
     # 4. Log Audit Event
