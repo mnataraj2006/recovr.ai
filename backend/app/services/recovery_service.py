@@ -54,7 +54,10 @@ class RecoveryService:
                 await db["transactions"].replace_one({"_id": transaction_id}, txn_data)
                 
                 # Retrieve existing diagnosis
-                diag_doc = await db["diagnoses"].find_one({"transaction_id": transaction_id})
+                diag_doc = await db["diagnoses"].find_one(
+                    {"transaction_id": transaction_id},
+                    sort=[("created_at", -1)]
+                )
                 root_cause = diag_doc["root_cause"] if diag_doc else "UNKNOWN_GATEWAY_ERROR"
             else:
                 if txn.status != "DIAGNOSING":
@@ -129,50 +132,102 @@ class RecoveryService:
             return False
 
     async def _execute_simulated_customer_nudge(self, transaction_id: str, action_id: str):
-        """Simulates customer receiving a nudge notification, clicking it, and successfully paying."""
+        """Simulates customer receiving a nudge notification, clicking it, and executing payment."""
         db = await get_db()
         
-        # Transition recovery action status: -> SUCCESS (simulating message delivery)
+        # 1. Update recovery action status: -> SUCCESS (simulating message delivery)
         await db["recovery_actions"].update_one(
             {"_id": action_id},
             {"$set": {"status": "SUCCESS", "executed_at": datetime.now(timezone.utc)}}
         )
         
-        # Load transaction
+        # 2. Load transaction
         txn_doc = await db["transactions"].find_one({"_id": transaction_id})
+        if not txn_doc:
+            logger.error(f"RecoveryService: Transaction {transaction_id} not found for nudge.")
+            return
+            
         txn_doc["id"] = txn_doc.pop("_id")
         from app.models.transaction import Transaction
         txn = Transaction(**txn_doc)
         
-        # Transition transaction state: APPROVED -> EXECUTING -> RECOVERED
-        # (For SMS/WhatsApp we assume successful recovery completion inside the simulation)
+        # 3. Transition transaction state: APPROVED -> EXECUTING
         txn.transition_to("EXECUTING")
-        txn.transition_to("RECOVERED")
-        
         txn_data = txn.model_dump()
         txn_data["_id"] = txn_data.pop("id")
         await db["transactions"].replace_one({"_id": transaction_id}, txn_data)
         
-        # Save recovery outcome document
-        outcome_doc = {
-            "_id": f"out_{uuid_4_hex()}",
-            "transaction_id": transaction_id,
-            "recovered": True,
-            "recovery_method": "NUDGE",
-            "recovered_at": datetime.now(timezone.utc),
-            "amount_recovered": txn.amount,
-            "total_cost": 0.05  # simulated cost (INR)
-        }
-        await db["recovery_outcomes"].insert_one(outcome_doc)
-        
         await log_audit_event(
             transaction_id=transaction_id,
-            event_type="PAYMENT_RECOVERED",
-            actor="CUSTOMER",
+            event_type="RECOVERY_ACTION_EXECUTING",
+            actor="SYSTEM",
             source="RecoveryService",
-            reason="Customer clicked the simulated nudge link and completed authorization.",
+            reason="Recovery nudge sent to customer; waiting for simulated customer response.",
             metadata={"action_id": action_id}
         )
+        
+        # 4. Determine alternative payment method if insufficient funds
+        diag_doc = await db["diagnoses"].find_one({"transaction_id": transaction_id})
+        root_cause = diag_doc["root_cause"] if diag_doc else "UNKNOWN_ABANDONMENT"
+        
+        payment_method = "wallet" if root_cause == "INSUFFICIENT_FUNDS" else (txn.payment_method or "upi")
+        
+        # 5. Create Payment Intent (transitions EXECUTING -> PAYMENT_ATTEMPTED)
+        from app.api.routes.payments import create_payment_intent, attempt_payment, PaymentCreateRequest, PaymentAttemptRequest
+        create_req = PaymentCreateRequest(transaction_id=transaction_id, payment_method=payment_method)
+        res_create = await create_payment_intent(create_req, db)
+        payment_id = res_create["payment_id"]
+        
+        # 6. Fetch outcomes sequence count to dynamically fetch outcome from simulated_outcomes
+        failed_attempts = await db["payment_attempts"].count_documents({
+            "transaction_id": transaction_id,
+            "status": "Failed"
+        })
+        
+        outcome = "SUCCESS"
+        if txn_doc.get("simulated_outcomes"):
+            outcomes = txn_doc["simulated_outcomes"]
+            if failed_attempts < len(outcomes):
+                outcome = outcomes[failed_attempts]
+        await log_audit_event(
+            transaction_id=transaction_id,
+            event_type="PAYMENT_RETRY_ATTEMPTED",
+            actor="CUSTOMER",
+            source="RecoveryService",
+            reason=f"Customer clicked nudge recovery link and authorized payment retry {failed_attempts + 1}.",
+            metadata={"payment_id": payment_id, "attempt_number": failed_attempts + 1, "simulated_outcome": outcome}
+        )
+        
+        # 7. Attempt simulated payment
+        attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome=outcome)
+        res_att = await attempt_payment(attempt_req, db)
+        
+        if res_att.get("success") or (isinstance(res_att, dict) and res_att.get("status") == "authorized"):
+            await db["recovery_actions"].update_one(
+                {"_id": action_id},
+                {"$set": {"status": "SUCCESS"}}
+            )
+            await log_audit_event(
+                transaction_id=transaction_id,
+                event_type="RECOVERY_ACTION_SUCCEEDED",
+                actor="CUSTOMER",
+                source="RecoveryService",
+                reason="Recovery action completed successfully via customer nudge.",
+                metadata={"action_id": action_id}
+            )
+        else:
+            await db["recovery_actions"].update_one(
+                {"_id": action_id},
+                {"$set": {"status": "FAILED"}}
+            )
+            await log_audit_event(
+                transaction_id=transaction_id,
+                event_type="RECOVERY_ACTION_FAILED",
+                actor="CUSTOMER",
+                source="RecoveryService",
+                reason="Customer nudge payment retry failed.",
+                metadata={"action_id": action_id, "error": res_att.get("error")}
+            )
 
 def uuid_4_hex() -> str:
     import uuid

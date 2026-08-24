@@ -74,6 +74,7 @@ class GuardrailEngine:
                 "transaction_id": txn_id,
                 "status": "Failed"
             })
+            print(f"GUARDRAIL CHECK FOR {txn_id}: FAILED ATTEMPTS COUNT = {failed_attempts}")
             retry_ok = failed_attempts < 3
             checks.append({"name": "retry_limit", "passed": retry_ok})
             if not retry_ok:
@@ -155,6 +156,15 @@ class GuardrailEngine:
         }
         await db["guardrail_decisions"].insert_one(decision_doc)
         
+        await log_audit_event(
+            transaction_id=txn_id,
+            event_type="GUARDRAIL_CHECKED",
+            actor="SYSTEM",
+            source="GuardrailEngine",
+            reason=f"Guardrail evaluation completed. Allowed: {allowed}. Reason: {block_reason}",
+            metadata={"action_id": action_id, "allowed": allowed}
+        )
+        
         # 5. Transition transaction state
         if allowed:
             # Approved -> Change state to APPROVED
@@ -172,9 +182,10 @@ class GuardrailEngine:
                 metadata={"action_id": action_id, "decision_id": decision_id}
             )
         else:
-            # Blocked -> Change state to UNRECOVERABLE or RETRY_ESCALATE
-            txn.transition_to("BLOCKED")
-            txn.transition_to("UNRECOVERABLE")
+            # Blocked -> Change state to UNRECOVERABLE if not already terminal
+            if txn.status not in ["RECOVERED", "SUCCESS"]:
+                txn.transition_to("BLOCKED")
+                txn.transition_to("UNRECOVERABLE")
             
             await db["recovery_actions"].update_one(
                 {"_id": action_id},

@@ -123,7 +123,16 @@ class RetryScheduler:
                 outcomes = txn_doc["simulated_outcomes"]
                 if failed_attempts < len(outcomes):
                     outcome = outcomes[failed_attempts]
-                    
+            
+            await log_audit_event(
+                transaction_id=transaction_id,
+                event_type="PAYMENT_RETRY_ATTEMPTED",
+                actor="SYSTEM",
+                source="RetryScheduler",
+                reason=f"Executing payment retry attempt {failed_attempts + 1}.",
+                metadata={"payment_id": payment_id, "attempt_number": failed_attempts + 1, "simulated_outcome": outcome}
+            )
+            
             attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome=outcome)
             res_att = await attempt_payment(attempt_req, db)
             
@@ -133,12 +142,28 @@ class RetryScheduler:
                     {"transaction_id": transaction_id, "status": "EXECUTING"},
                     {"$set": {"status": "SUCCESS"}}
                 )
+                await log_audit_event(
+                    transaction_id=transaction_id,
+                    event_type="RECOVERY_ACTION_SUCCEEDED",
+                    actor="SYSTEM",
+                    source="RetryScheduler",
+                    reason="Recovery action completed successfully.",
+                    metadata={"payment_id": payment_id}
+                )
                 logger.info(f"Scheduler: Successfully recovered Transaction {transaction_id}")
             else:
                 # Mark recovery action failed
                 await db["recovery_actions"].update_one(
                     {"transaction_id": transaction_id, "status": "EXECUTING"},
                     {"$set": {"status": "FAILED"}}
+                )
+                await log_audit_event(
+                    transaction_id=transaction_id,
+                    event_type="RECOVERY_ACTION_FAILED",
+                    actor="SYSTEM",
+                    source="RetryScheduler",
+                    reason="Recovery action retry attempt failed.",
+                    metadata={"payment_id": payment_id, "error": res_att.get("error")}
                 )
                 logger.error(f"Scheduler: Background retry failed for Transaction {transaction_id}")
                 

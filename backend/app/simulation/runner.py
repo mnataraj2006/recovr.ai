@@ -2,6 +2,7 @@ import uuid
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 from httpx import AsyncClient
 from app.db.connection import get_db
 from app.services.recovery_service import recovery_service
@@ -35,7 +36,7 @@ COHORT_PROFILES = [
         "email": "sneha.reddy@example.com",
         "phone": "+919222233333",
         "amount": 5500.0,
-        "failure_mode": "INCORRECT_OTP"  # Triggers Nudge with Incentive -> success
+        "failure_mode": "OTP_FAILURE"  # Triggers Nudge with Incentive -> success
     },
     {
         "name": "Vikram Singh",
@@ -47,11 +48,15 @@ COHORT_PROFILES = [
 ]
 
 class SimulationRunner:
-    async def run_batch_cohort(self) -> dict:
+    async def run_batch_cohort(self, seed: Optional[int] = 42) -> dict:
         """
         Runs an asynchronous batch simulation for a cohort of 5 customers,
         evaluates all recovery flows concurrently, and aggregates results.
         """
+        if seed is not None:
+            import random
+            random.seed(seed)
+            
         simulation_id = f"sim_{uuid.uuid4().hex[:8]}"
         logger.info(f"SimulationRunner: Launching batch cohort {simulation_id}")
         
@@ -75,17 +80,31 @@ class SimulationRunner:
             cohort_txns = await db["transactions"].find({"_id": {"$in": txn_ids}}).to_list(length=10)
             cohort_actions = await db["recovery_actions"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
             cohort_decisions = await db["guardrail_decisions"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
-            
             total_revenue_at_risk = sum(t["amount"] for t in cohort_txns)
             total_recovered_revenue = sum(t["amount"] for t in cohort_txns if t["status"] in ["RECOVERED", "SUCCESS"])
             recovery_rate = (total_recovered_revenue / total_revenue_at_risk) if total_revenue_at_risk > 0 else 0.0
             
             # Recovery Costs
-            nudge_count = sum(1 for a in cohort_actions if a["action_type"] == "NUDGE_CUSTOMER")
-            retry_count = sum(1 for a in cohort_actions if a["action_type"] == "RETRY_PAYMENT")
-            total_recovery_cost = (nudge_count * 0.50) + (retry_count * 1.00)
+            total_recovery_cost = 0.0
+            nudge_count = 0
+            retry_count = 0
+            for a in cohort_actions:
+                a_type = a.get("action_type")
+                channel = a.get("channel")
+                if a_type == "RETRY_PAYMENT":
+                    retry_count += 1
+                    total_recovery_cost += 1.00
+                elif a_type == "NUDGE_CUSTOMER":
+                    nudge_count += 1
+                    if channel == "EMAIL":
+                        total_recovery_cost += 0.10
+                    elif channel in ["SMS", "WHATSAPP"]:
+                        total_recovery_cost += 0.50
+                    else:
+                        total_recovery_cost += 0.50
+                        
             net_recovered_revenue = total_recovered_revenue - total_recovery_cost
-            roi = (total_recovered_revenue / total_recovery_cost) if total_recovery_cost > 0 else 0.0
+            roi = ((total_recovered_revenue - total_recovery_cost) / total_recovery_cost) if total_recovery_cost > 0 else 0.0
             
             cohort_summary = []
             for t in cohort_txns:
@@ -162,7 +181,11 @@ class SimulationRunner:
                     "status": "Failed",
                     "gateway_reference": f"ref_sim_{i}",
                     "payment_method": "upi",
-                    "created_at": datetime.now(timezone.utc)
+                    "gateway_error_code": "GATEWAY_TIMEOUT",
+                    "gateway_error_reason": "gateway_timeout",
+                    "gateway_error_message": "Gateway connection timed out before bank response received.",
+                    "created_at": datetime.now(timezone.utc),
+                    "completed_at": datetime.now(timezone.utc)
                 })
             
             # Trigger process_failed_payment directly (will get blocked by retry cap guardrail)

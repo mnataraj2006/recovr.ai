@@ -154,8 +154,10 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
             "payment_method": payment_doc["payment_method"],
             "status": "Success",
             "gateway_error_code": None,
+            "gateway_error_reason": None,
             "gateway_error_message": None,
-            "created_at": datetime.now(timezone.utc)
+            "created_at": datetime.now(timezone.utc),
+            "completed_at": datetime.now(timezone.utc)
         }
         await db["payment_attempts"].insert_one(attempt_doc)
         
@@ -203,19 +205,6 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
         txn_data["_id"] = txn_data.pop("id")
         await db["transactions"].replace_one({"_id": txn.id}, txn_data)
         
-        # Trigger Recovery Service in background
-        from app.services.recovery_service import recovery_service
-        import asyncio
-        task = asyncio.create_task(
-            recovery_service.process_failed_payment(
-                txn.id,
-                error_code=outcome,
-                error_description=error_details["description"],
-                fast_mode=True
-            )
-        )
-        recovery_service.track_task(task)
-        
         # Update payment status
         await db["payments"].update_one({"_id": req.payment_id}, {"$set": {"status": "failed"}})
         
@@ -228,8 +217,10 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
             "payment_method": payment_doc["payment_method"],
             "status": "Failed",
             "gateway_error_code": outcome,
+            "gateway_error_reason": error_details["reason"],
             "gateway_error_message": error_details["description"],
-            "created_at": datetime.now(timezone.utc)
+            "created_at": datetime.now(timezone.utc),
+            "completed_at": datetime.now(timezone.utc)
         }
         await db["payment_attempts"].insert_one(attempt_doc)
         
@@ -245,6 +236,19 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
                 "error_code": outcome
             }
         )
+        
+        # Trigger Recovery Service in background after database state is committed
+        from app.services.recovery_service import recovery_service
+        import asyncio
+        task = asyncio.create_task(
+            recovery_service.process_failed_payment(
+                txn.id,
+                error_code=outcome,
+                error_description=error_details["description"],
+                fast_mode=True
+            )
+        )
+        recovery_service.track_task(task)
         
         # In a real system, this failure webhook triggers our Recovery Loop.
         # We will mock the webhook trigger in Milestone 2 route.
