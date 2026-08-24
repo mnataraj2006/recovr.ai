@@ -55,9 +55,9 @@ async def test_guardrail_duplicate_payment_block(db):
     assert res["allowed"] is False
     assert "already has a successful payment" in res["reason"]
     
-    # Assert transaction state updated to UNRECOVERABLE
+    # Assert transaction state is NOT converted to UNRECOVERABLE
     txn_final = await db["transactions"].find_one({"_id": txn_id})
-    assert txn_final["status"] == "UNRECOVERABLE"
+    assert txn_final["status"] != "UNRECOVERABLE"
 
 @pytest.mark.asyncio
 async def test_guardrail_retry_limit_exceeded(db):
@@ -209,7 +209,8 @@ async def test_end_to_end_auto_retry_recovery_integration(db):
                 "phone": "+919555566666"
             },
             "cart_value": 3500.0,
-            "items": []
+            "items": [],
+            "simulated_outcomes": ["GATEWAY_TIMEOUT", "SUCCESS"]
         }
         res_chk = await ac.post("/api/v1/checkouts", json=checkout_payload)
         chk_data = res_chk.json()

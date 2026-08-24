@@ -142,6 +142,11 @@ class GuardrailEngine:
                 allowed = False
                 block_reason = f"Action type '{action_type}' is invalid."
 
+        terminal = False
+        failed_check_names = [c["name"] for c in checks if not c.get("passed", True)]
+        if "retry_limit" in failed_check_names or "nudge_limit" in failed_check_names:
+            terminal = True
+
         decision_id = f"gdl_{uuid.uuid4().hex[:8]}"
         
         # 4. Save Guardrail Decision Document
@@ -152,6 +157,7 @@ class GuardrailEngine:
             "allowed": allowed,
             "checks_run": checks,
             "reason": block_reason,
+            "terminal": terminal,
             "created_at": datetime.now(timezone.utc)
         }
         await db["guardrail_decisions"].insert_one(decision_doc)
@@ -162,7 +168,7 @@ class GuardrailEngine:
             actor="SYSTEM",
             source="GuardrailEngine",
             reason=f"Guardrail evaluation completed. Allowed: {allowed}. Reason: {block_reason}",
-            metadata={"action_id": action_id, "allowed": allowed}
+            metadata={"action_id": action_id, "allowed": allowed, "terminal": terminal}
         )
         
         # 5. Transition transaction state
@@ -182,8 +188,8 @@ class GuardrailEngine:
                 metadata={"action_id": action_id, "decision_id": decision_id}
             )
         else:
-            # Blocked -> Change state to UNRECOVERABLE if not already terminal
-            if txn.status not in ["RECOVERED", "SUCCESS"]:
+            # Blocked -> Change state to UNRECOVERABLE only if terminal and not already RECOVERED/SUCCESS
+            if terminal and txn.status not in ["RECOVERED", "SUCCESS"]:
                 txn.transition_to("BLOCKED")
                 txn.transition_to("UNRECOVERABLE")
             
@@ -197,7 +203,7 @@ class GuardrailEngine:
                 actor="SYSTEM",
                 source="GuardrailEngine",
                 reason=f"Recovery action blocked: {block_reason}",
-                metadata={"action_id": action_id, "decision_id": decision_id, "reason": block_reason}
+                metadata={"action_id": txn_id, "decision_id": decision_id, "reason": block_reason, "terminal": terminal}
             )
             
         # Save transaction status update
@@ -208,6 +214,7 @@ class GuardrailEngine:
         return {
             "allowed": allowed,
             "reason": block_reason,
+            "terminal": terminal,
             "checks": checks
         }
 

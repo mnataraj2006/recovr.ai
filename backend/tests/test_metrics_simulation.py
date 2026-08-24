@@ -51,8 +51,9 @@ async def test_metrics_engine_calculations(db):
         assert data["total_revenue_at_risk"] == 5000.0
         # Recovered = 2000
         assert data["total_recovered_revenue"] == 2000.0
-        # Recovery Rate = 2000 / 5000 = 0.4
-        assert data["recovery_rate"] == 0.4
+        # Transaction Recovery Rate = 1 / 2 = 0.5, Revenue Recovery Rate = 2000 / 5000 = 0.4
+        assert data["transaction_recovery_rate"] == 0.5
+        assert data["revenue_recovery_rate"] == 0.4
         # Cost = (1 * 0.50) + (1 * 1.00) = 1.50
         assert data["total_recovery_cost"] == 1.50
         # Net = 2000 - 1.50 = 1998.50

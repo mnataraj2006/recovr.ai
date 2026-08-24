@@ -135,10 +135,10 @@ class RecoveryService:
         """Simulates customer receiving a nudge notification, clicking it, and executing payment."""
         db = await get_db()
         
-        # 1. Update recovery action status: -> SUCCESS (simulating message delivery)
+        # 1. Update recovery action status: -> EXECUTING (simulating message delivery)
         await db["recovery_actions"].update_one(
             {"_id": action_id},
-            {"$set": {"status": "SUCCESS", "executed_at": datetime.now(timezone.utc)}}
+            {"$set": {"status": "EXECUTING", "executed_at": datetime.now(timezone.utc)}}
         )
         
         # 2. Load transaction
@@ -159,10 +159,19 @@ class RecoveryService:
         
         await log_audit_event(
             transaction_id=transaction_id,
-            event_type="RECOVERY_ACTION_EXECUTING",
+            event_type="RECOVERY_NUDGE_SENT",
             actor="SYSTEM",
             source="RecoveryService",
-            reason="Recovery nudge sent to customer; waiting for simulated customer response.",
+            reason="Recovery nudge notification dispatched to customer.",
+            metadata={"action_id": action_id}
+        )
+        
+        await log_audit_event(
+            transaction_id=transaction_id,
+            event_type="CUSTOMER_RETURNED_TO_CHECKOUT",
+            actor="CUSTOMER",
+            source="RecoveryService",
+            reason="Customer clicked recovery link and returned to checkout.",
             metadata={"action_id": action_id}
         )
         
@@ -178,25 +187,13 @@ class RecoveryService:
         res_create = await create_payment_intent(create_req, db)
         payment_id = res_create["payment_id"]
         
-        # 6. Fetch outcomes sequence count to dynamically fetch outcome from simulated_outcomes
-        failed_attempts = await db["payment_attempts"].count_documents({
-            "transaction_id": transaction_id,
-            "status": "Failed"
-        })
+        prev_attempts = await db["payment_attempts"].count_documents({"transaction_id": transaction_id})
         
-        outcome = "SUCCESS"
+        outcome = None
         if txn_doc.get("simulated_outcomes"):
             outcomes = txn_doc["simulated_outcomes"]
-            if failed_attempts < len(outcomes):
-                outcome = outcomes[failed_attempts]
-        await log_audit_event(
-            transaction_id=transaction_id,
-            event_type="PAYMENT_RETRY_ATTEMPTED",
-            actor="CUSTOMER",
-            source="RecoveryService",
-            reason=f"Customer clicked nudge recovery link and authorized payment retry {failed_attempts + 1}.",
-            metadata={"payment_id": payment_id, "attempt_number": failed_attempts + 1, "simulated_outcome": outcome}
-        )
+            if prev_attempts < len(outcomes):
+                outcome = outcomes[prev_attempts]
         
         # 7. Attempt simulated payment
         attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome=outcome)

@@ -16,7 +16,7 @@ class PaymentCreateRequest(BaseModel):
 
 class PaymentAttemptRequest(BaseModel):
     payment_id: str
-    simulated_outcome: str = "SUCCESS"  # SUCCESS, INSUFFICIENT_FUNDS, GATEWAY_TIMEOUT, OTP_FAILURE, NETWORK_ERROR, PAYMENT_CANCELLED
+    simulated_outcome: Optional[str] = None  # SUCCESS, INSUFFICIENT_FUNDS, GATEWAY_TIMEOUT, OTP_FAILURE, NETWORK_ERROR, PAYMENT_CANCELLED
 
 class PaymentRetryRequest(BaseModel):
     transaction_id: str
@@ -129,9 +129,30 @@ async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
     # 2. Count attempts to determine attempt_number
     prev_attempts = await db["payment_attempts"].count_documents({"transaction_id": txn_id})
     attempt_number = prev_attempts + 1
-
     payment_attempt_id = f"att_{uuid.uuid4().hex[:8]}"
-    outcome = req.simulated_outcome.upper()
+
+    # Determine simulated outcome based on transaction's simulated_outcomes array (indexed by prev_attempts),
+    # or fallback to req.simulated_outcome, or fallback to GATEWAY_TIMEOUT (never default to SUCCESS blindly).
+    outcome = None
+    if txn_doc.get("simulated_outcomes"):
+        outcomes = txn_doc["simulated_outcomes"]
+        if prev_attempts < len(outcomes):
+            outcome = outcomes[prev_attempts]
+            
+    if not outcome and req.simulated_outcome:
+        outcome = req.simulated_outcome
+        
+    if not outcome:
+        last_failed = await db["payment_attempts"].find_one(
+            {"transaction_id": txn_id, "status": "Failed"},
+            sort=[("attempt_number", -1)]
+        )
+        if last_failed and last_failed.get("gateway_error_code"):
+            outcome = last_failed["gateway_error_code"]
+        else:
+            outcome = "GATEWAY_TIMEOUT"
+            
+    outcome = outcome.upper()
 
     if outcome == "SUCCESS":
         # Transition state: -> SUCCESS -> RECOVERED (Wait, standard flow sets to SUCCESS first)

@@ -25,7 +25,8 @@ async def test_checkout_and_simulated_payment_failure_flow(db):
             ],
             "device_info": {
                 "platform": "Mobile"
-            }
+            },
+            "simulated_outcomes": ["GATEWAY_TIMEOUT", "SUCCESS"]
         }
         res_chk = await ac.post("/api/v1/checkouts", json=checkout_payload)
         assert res_chk.status_code == 201
@@ -98,19 +99,20 @@ async def test_manual_checkout_abandonment(db):
         # 1. Create Checkout
         checkout_payload = {
             "customer": {
-                "name": "Bob Tester",
-                "email": "bob@example.com",
-                "phone": "+919999911111"
+                "name": "Alice Tester",
+                "email": "alice@example.com",
+                "phone": "+919999900000"
             },
-            "cart_value": 450.00,
+            "cart_value": 2999.00,
             "items": [
                 {
-                    "sku": "SKU-2",
-                    "name": "Standard Item",
-                    "price": 450.0,
+                    "sku": "SKU-1",
+                    "name": "Test Item",
+                    "price": 2999.0,
                     "quantity": 1
                 }
-            ]
+            ],
+            "simulated_outcomes": ["SUCCESS"]
         }
         res_chk = await ac.post("/api/v1/checkouts", json=checkout_payload)
         assert res_chk.status_code == 201

@@ -15,35 +15,40 @@ COHORT_PROFILES = [
         "email": "arjun.sharma@example.com",
         "phone": "+919988877666",
         "amount": 4200.0,
-        "failure_mode": "GATEWAY_TIMEOUT"  # Triggers Auto-retry -> success
+        "failure_mode": "GATEWAY_TIMEOUT",
+        "simulated_outcomes": ["GATEWAY_TIMEOUT", "SUCCESS"]
     },
     {
         "name": "Priya Patel",
         "email": "priya.patel@example.com",
         "phone": "+919876543219",
         "amount": 1500.0,
-        "failure_mode": "INSUFFICIENT_FUNDS"  # Triggers Customer Nudge -> success
+        "failure_mode": "INSUFFICIENT_FUNDS",
+        "simulated_outcomes": ["INSUFFICIENT_FUNDS", "SUCCESS"]
     },
     {
         "name": "Rohan Das",
         "email": "rohan.das@example.com",
         "phone": "+919555512345",
         "amount": 750.0,
-        "failure_mode": "ABANDON"  # Cart abandonment -> Nudge -> success
+        "failure_mode": "ABANDON",
+        "simulated_outcomes": ["SUCCESS"]
     },
     {
         "name": "Sneha Reddy",
         "email": "sneha.reddy@example.com",
         "phone": "+919222233333",
         "amount": 5500.0,
-        "failure_mode": "OTP_FAILURE"  # Triggers Nudge with Incentive -> success
+        "failure_mode": "OTP_FAILURE",
+        "simulated_outcomes": ["OTP_FAILURE", "SUCCESS"]
     },
     {
         "name": "Vikram Singh",
         "email": "vikram.singh@example.com",
         "phone": "+919111122222",
         "amount": 3200.0,
-        "failure_mode": "DOUBLE_ATTEMPT_BLOCK"  # Force retry cap / blocked action -> UNRECOVERABLE
+        "failure_mode": "DOUBLE_ATTEMPT_BLOCK",
+        "simulated_outcomes": ["GATEWAY_TIMEOUT", "GATEWAY_TIMEOUT", "GATEWAY_TIMEOUT", "GATEWAY_TIMEOUT"]
     }
 ]
 
@@ -80,9 +85,15 @@ class SimulationRunner:
             cohort_txns = await db["transactions"].find({"_id": {"$in": txn_ids}}).to_list(length=10)
             cohort_actions = await db["recovery_actions"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
             cohort_decisions = await db["guardrail_decisions"].find({"transaction_id": {"$in": txn_ids}}).to_list(length=20)
+            at_risk_transactions = len(cohort_txns)
+            recovered_txns = [t for t in cohort_txns if t["status"] in ["RECOVERED", "SUCCESS"]]
+            recovered_transactions = len(recovered_txns)
+            
             total_revenue_at_risk = sum(t["amount"] for t in cohort_txns)
-            total_recovered_revenue = sum(t["amount"] for t in cohort_txns if t["status"] in ["RECOVERED", "SUCCESS"])
-            recovery_rate = (total_recovered_revenue / total_revenue_at_risk) if total_revenue_at_risk > 0 else 0.0
+            total_recovered_revenue = sum(t["amount"] for t in recovered_txns)
+            
+            transaction_recovery_rate = (recovered_transactions / at_risk_transactions) if at_risk_transactions > 0 else 0.0
+            revenue_recovery_rate = (total_recovered_revenue / total_revenue_at_risk) if total_revenue_at_risk > 0 else 0.0
             
             # Recovery Costs
             total_recovery_cost = 0.0
@@ -127,10 +138,16 @@ class SimulationRunner:
             report = {
                 "_id": simulation_id,
                 "created_at": datetime.now(timezone.utc),
+                "at_risk_transactions": at_risk_transactions,
+                "recovered_transactions": recovered_transactions,
+                "transaction_recovery_rate": transaction_recovery_rate,
                 "total_revenue_at_risk": total_revenue_at_risk,
+                "revenue_at_risk": total_revenue_at_risk,
                 "total_recovered_revenue": total_recovered_revenue,
+                "recovered_revenue": total_recovered_revenue,
+                "revenue_recovery_rate": revenue_recovery_rate,
                 "net_recovered_revenue": net_recovered_revenue,
-                "recovery_rate": recovery_rate,
+                "recovery_rate": transaction_recovery_rate,
                 "total_recovery_cost": total_recovery_cost,
                 "roi": roi,
                 "nudge_count": nudge_count,
@@ -151,7 +168,8 @@ class SimulationRunner:
                 "phone": profile["phone"]
             },
             "cart_value": profile["amount"],
-            "items": []
+            "items": [],
+            "simulated_outcomes": profile.get("simulated_outcomes")
         }
         res_chk = await ac.post("/api/v1/checkouts", json=checkout_payload)
         chk_data = res_chk.json()

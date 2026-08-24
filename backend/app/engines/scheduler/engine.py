@@ -111,26 +111,22 @@ class RetryScheduler:
             res_create = await create_payment_intent(create_req, db)
             payment_id = res_create["payment_id"]
             
-            # Fetch failed attempts count to dynamically check the simulated outcomes
-            failed_attempts = await db["payment_attempts"].count_documents({
-                "transaction_id": transaction_id,
-                "status": "Failed"
-            })
+            prev_attempts = await db["payment_attempts"].count_documents({"transaction_id": transaction_id})
             
             # Step B: Attempt Authorization
-            outcome = "SUCCESS"
+            outcome = None
             if txn_doc.get("simulated_outcomes"):
                 outcomes = txn_doc["simulated_outcomes"]
-                if failed_attempts < len(outcomes):
-                    outcome = outcomes[failed_attempts]
+                if prev_attempts < len(outcomes):
+                    outcome = outcomes[prev_attempts]
             
             await log_audit_event(
                 transaction_id=transaction_id,
                 event_type="PAYMENT_RETRY_ATTEMPTED",
                 actor="SYSTEM",
                 source="RetryScheduler",
-                reason=f"Executing payment retry attempt {failed_attempts + 1}.",
-                metadata={"payment_id": payment_id, "attempt_number": failed_attempts + 1, "simulated_outcome": outcome}
+                reason=f"Executing payment retry attempt {prev_attempts + 1}.",
+                metadata={"payment_id": payment_id, "attempt_number": prev_attempts + 1, "simulated_outcome": outcome}
             )
             
             attempt_req = PaymentAttemptRequest(payment_id=payment_id, simulated_outcome=outcome)

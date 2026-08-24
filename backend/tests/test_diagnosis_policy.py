@@ -64,7 +64,8 @@ async def test_cart_abandonment_llm_fallback_flow(db):
                 "phone": "+918888888888"
             },
             "cart_value": 5000.00,
-            "items": []
+            "items": [],
+            "simulated_outcomes": ["SUCCESS"]
         }
         res_chk = await ac.post("/api/v1/checkouts", json=checkout_payload)
         chk_id = res_chk.json()["checkout_id"]
