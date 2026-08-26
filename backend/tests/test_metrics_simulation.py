@@ -98,10 +98,15 @@ async def test_audit_logs_endpoints(db):
 @pytest.mark.asyncio
 async def test_batch_cohort_simulation_run(db):
     """Verify that cohort batch simulations run and save summary reports successfully."""
+    from app.services.auth_service import ensure_seed_user
+    await ensure_seed_user(db)
     async with AsyncClient(app=app, base_url="http://test") as ac:
-        # Trigger simulation run
-        res = await ac.post("/api/v1/simulation/run")
+        login_res = await ac.post("/api/v1/auth/login", json={"email": "admin@recovr.ai", "password": "Admin@123456"})
+        token = login_res.json()["access_token"]
+        # Trigger simulation run with admin token
+        res = await ac.post("/api/v1/simulation/run", headers={"Authorization": f"Bearer {token}"})
         assert res.status_code == 201
+
         report = res.json()
         
         # Verify cohort metrics

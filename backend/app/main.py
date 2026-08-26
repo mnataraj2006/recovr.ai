@@ -6,8 +6,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.db.connection import db_connection, get_db
+from app.services.auth_service import ensure_seed_user
+from app.middleware import SecurityMiddleware
 
-from app.api.routes import checkouts, payments, recovery, metrics, audit, simulation
+from app.api.routes import checkouts, payments, recovery, metrics, audit, simulation, auth, api_keys, health
 
 # Configure application logging
 logging.basicConfig(
@@ -18,12 +20,16 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize DB Client connection
-    logger.info("Starting up Recovr.ai Backend...")
+    # Startup: Initialize DB Client connection & seed admin user
+    logger.info(f"Starting up Recovr.ai Backend (Environment: {settings.ENVIRONMENT})...")
     try:
         await db_connection.connect()
+        db = await get_db()
+        await ensure_seed_user(db)
     except Exception as e:
         logger.critical(f"Startup DB connection failed: {e}")
+        if settings.ENVIRONMENT.lower() == "production":
+            raise e
     yield
     # Shutdown: Close database connection pool
     logger.info("Shutting down Recovr.ai Backend...")
@@ -36,43 +42,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Allow the Vite dev server (and any localhost port) to call the API
+# Custom security middleware (request correlation ID & sliding-window rate limiting)
+app.add_middleware(SecurityMiddleware)
+
+# CORS configuration based on environment settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 # Register routers under v1 API
+app.include_router(health.router, tags=["Health"])
+app.include_router(auth.router, prefix="/api/v1", tags=["Authentication"])
+app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(checkouts.router, prefix="/api/v1", tags=["Checkouts"])
 app.include_router(payments.router, prefix="/api/v1", tags=["Payments"])
 app.include_router(recovery.router, prefix="/api/v1", tags=["Recovery"])
 app.include_router(metrics.router, prefix="/api/v1", tags=["Metrics"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(simulation.router, prefix="/api/v1", tags=["Simulation"])
-
-@app.get("/health")
-async def health_check(db = Depends(get_db)):
-    try:
-        # Ping the DB as a health check
-        await db.client.admin.command('ping')
-        db_status = "healthy"
-    except Exception as e:
-        logger.error(f"Health check database ping failed: {e}")
-        db_status = f"unhealthy ({str(e)})"
-
-    return {
-        "status": "online",
-        "environment": settings.ENVIRONMENT,
-        "database": db_status
-    }
 
 # Serve static frontend files if built
 frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))

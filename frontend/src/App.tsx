@@ -1,4 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Login } from './pages/Login';
 import { AppShell } from './components/layout/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { Analytics } from './pages/Analytics';
@@ -12,7 +14,24 @@ import { Security } from './pages/settings/Security';
 import { Notifications } from './pages/settings/Notifications';
 import { Team } from './pages/settings/Team';
 
-function App() {
+function AppRoutes() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#00141e] flex items-center justify-center text-[#7dd3fc]">
+        <div className="flex flex-col items-center gap-3">
+          <span className="material-symbols-outlined animate-spin text-3xl">progress_activity</span>
+          <span className="text-sm font-medium">Authenticating Recovr.ai Session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
+
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -44,6 +63,14 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }
 

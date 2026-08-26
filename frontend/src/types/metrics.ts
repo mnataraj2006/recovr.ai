@@ -3,6 +3,12 @@ export interface MetricData {
   total_recovered_revenue: number;
   net_recovered_revenue: number;
   recovery_rate: number;
+  transaction_recovery_rate?: number;
+  revenue_recovery_rate?: number;
+  at_risk_transactions?: number;
+  recovered_transactions?: number;
+  total_transactions?: number;
+  normal_success_revenue?: number;
   total_recovery_cost: number;
   roi: number;
   nudge_count: number;

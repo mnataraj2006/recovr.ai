@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const topNavLinks = [
   { label: 'Dashboard',  to: '/' },
@@ -9,8 +9,8 @@ const topNavLinks = [
 ];
 
 export function TopNav() {
-  const [searchVal, setSearchVal] = useState('');
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const isSettings = location.pathname.startsWith('/settings');
 
@@ -57,28 +57,27 @@ export function TopNav() {
         </nav>
       </div>
 
-      {/* Right: Search + Icons + Avatar */}
-      <div className="flex items-center gap-2 lg:gap-3">
-        <div className="relative hidden lg:block">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#a0b4c4]" style={{ fontSize: 18 }}>search</span>
-          <input
-            value={searchVal}
-            onChange={(e) => setSearchVal(e.target.value)}
-            placeholder="Search metrics..."
-            className="w-52 rounded-full py-1.5 pl-9 pr-4 text-sm text-[#e0e8f0] placeholder:text-[#a0b4c4]/60 outline-none transition-all focus:w-64 border border-[rgba(125,211,252,0.15)]"
-            style={{ background: 'rgba(32,44,66,0.6)', backdropFilter: 'blur(8px)' }}
-          />
-        </div>
-        <button className="relative p-2 text-[#a0b4c4] hover:text-[#7dd3fc] hover:bg-[rgba(125,211,252,0.08)] rounded-full transition-all">
-          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>notifications</span>
-          <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#ff6b6b] rounded-full shadow-[0_0_5px_rgba(255,107,107,0.8)]"></span>
+      {/* Right: User Profile & Actions */}
+      <div className="flex items-center gap-3">
+        {user && (
+          <div className="flex items-center gap-3 bg-[rgba(26,36,56,0.6)] px-3 py-1.5 rounded-full border border-[rgba(125,211,252,0.12)]">
+            <div className="text-right hidden sm:block">
+              <div className="text-xs font-semibold text-[#e0e8f0]">{user.name}</div>
+              <div className="text-[10px] text-[#7dd3fc] font-mono">{user.role}</div>
+            </div>
+            <div className="w-7 h-7 rounded-full border border-[rgba(125,211,252,0.3)] flex items-center justify-center bg-[rgba(125,211,252,0.15)] text-[#7dd3fc] font-bold text-xs">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={logout}
+          className="p-2 text-[#a0b4c4] hover:text-[#ff6b6b] hover:bg-[rgba(255,107,107,0.1)] rounded-full transition-all flex items-center gap-1 text-xs"
+          title="Sign Out"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>logout</span>
         </button>
-        <button className="p-2 text-[#a0b4c4] hover:text-[#7dd3fc] hover:bg-[rgba(125,211,252,0.08)] rounded-full transition-all">
-          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>settings</span>
-        </button>
-        <div className="w-8 h-8 rounded-full border border-[rgba(125,211,252,0.3)] overflow-hidden cursor-pointer hover:border-[#7dd3fc] transition-colors flex items-center justify-center bg-[rgba(125,211,252,0.15)]">
-          <span className="material-symbols-outlined text-[#7dd3fc]" style={{ fontSize: 20 }}>person</span>
-        </div>
       </div>
     </header>
   );

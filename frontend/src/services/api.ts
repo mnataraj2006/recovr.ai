@@ -7,3 +7,16 @@ export const API_BASE =
   window.location.port === '5173' || window.location.port === '3000'
     ? 'http://localhost:8000'
     : '';
+
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem('recovr_token');
+  const headers = new Headers(init.headers || {});
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+    headers.set('Content-Type', 'application/json');
+  }
+  const fullUrl = input.startsWith('http') ? input : `${API_BASE}${input}`;
+  return fetch(fullUrl, { ...init, headers });
+}
