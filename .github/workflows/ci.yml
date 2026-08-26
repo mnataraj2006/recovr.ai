@@ -10,6 +10,11 @@ jobs:
   backend-tests:
     name: Backend Pytest Invariant & Security Tests
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
     steps:
       - uses: actions/checkout@v4
 
