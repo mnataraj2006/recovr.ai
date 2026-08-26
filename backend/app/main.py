@@ -9,7 +9,7 @@ from app.db.connection import db_connection, get_db
 from app.services.auth_service import ensure_seed_user
 from app.middleware import SecurityMiddleware
 
-from app.api.routes import checkouts, payments, recovery, metrics, audit, simulation, auth, api_keys, health
+from app.api.routes import checkouts, payments, recovery, metrics, audit, simulation, auth, api_keys, users, health
 
 # Configure application logging
 logging.basicConfig(
@@ -57,6 +57,7 @@ app.add_middleware(
 # Register routers under v1 API
 app.include_router(health.router, tags=["Health"])
 app.include_router(auth.router, prefix="/api/v1", tags=["Authentication"])
+app.include_router(users.router, prefix="/api/v1", tags=["Users"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(checkouts.router, prefix="/api/v1", tags=["Checkouts"])
 app.include_router(payments.router, prefix="/api/v1", tags=["Payments"])

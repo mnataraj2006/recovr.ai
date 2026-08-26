@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from app.db.connection import get_db
-from app.services.auth_service import verify_password, create_access_token
+from app.services.auth_service import verify_password, create_access_token, hash_password
 from app.api.dependencies import get_current_user
 from app.audit.logger import log_audit_event
 
@@ -83,3 +83,40 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         name=current_user.get("name", "User"),
         role=current_user.get("role", "VIEWER")
     )
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=100)
+
+@router.post("/auth/change-password")
+async def change_password(
+    req: ChangePasswordRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Securely updates password for authenticated user."""
+    user_id = current_user["id"]
+    user_doc = await db["users"].find_one({"_id": user_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User account not found.")
+
+    if not verify_password(req.current_password, user_doc.get("hashed_password", "")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect."
+        )
+
+    new_hash = hash_password(req.new_password)
+    await db["users"].update_one({"_id": user_id}, {"$set": {"hashed_password": new_hash}})
+
+    await log_audit_event(
+        transaction_id="SYSTEM",
+        event_type="USER_PASSWORD_CHANGED",
+        actor="USER",
+        source="AuthRouter",
+        reason=f"User {user_id} changed account password.",
+        metadata={"user_id": user_id}
+    )
+
+    return {"success": True, "message": "Password changed successfully."}
+
