@@ -61,13 +61,9 @@ export function SideNav() {
         ))}
       </nav>
 
-      {/* New Analysis CTA */}
+      {/* Sidebar Footer Links */}
       <div className="p-3 lg:p-4 border-t border-[rgba(125,211,252,0.10)]">
-        <button className="w-full py-2 text-[#7dd3fc] border border-[rgba(125,211,252,0.30)] rounded-lg text-xs lg:text-sm font-medium transition-all hover:bg-[rgba(125,211,252,0.15)] active:scale-95 shadow-[0_0_15px_rgba(125,211,252,0.08)]"
-          style={{ background: 'rgba(125,211,252,0.08)' }}>
-          + New Analysis
-        </button>
-        <div className="mt-3 flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5">
           <a href="#" className="flex items-center gap-2 px-2 py-1.5 rounded text-[#a0b4c4] hover:text-[#e0e8f0] hover:bg-[rgba(125,211,252,0.05)] text-xs transition-all">
             <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: 16 }}>help</span>
             <span className="truncate">Help Center</span>
