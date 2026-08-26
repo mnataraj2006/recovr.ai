@@ -124,7 +124,7 @@ export function AuditLogs() {
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="border-b border-[rgba(125,211,252,0.08)]" style={{ background: 'rgba(15,21,36,0.4)' }}>
-                {['Transaction ID', 'Customer', 'Timestamp', 'Status', 'Amount', 'Failure Mode', 'Proposed Action'].map((h) => (
+                {['Transaction ID', 'Customer', 'Timestamp', 'Status', 'Amount', 'Failure Mode', 'Proposed Action', 'Action'].map((h) => (
                   <th key={h} className="py-4 px-5 text-[10px] font-semibold text-[#a0b4c4] uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -134,7 +134,7 @@ export function AuditLogs() {
             <tbody className="divide-y divide-[rgba(125,211,252,0.05)]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#a0b4c4]">
+                  <td colSpan={8} className="py-12 text-center text-[#a0b4c4]">
                     <span className="material-symbols-outlined animate-spin text-2xl mb-2">sync</span>
                     <p className="text-sm">Loading audit logs...</p>
                   </td>
@@ -143,10 +143,10 @@ export function AuditLogs() {
                 pageTransactions.map((row) => (
                   <tr
                     key={row.id}
-                    className="table-row-hover transition-colors cursor-pointer"
+                    className="table-row-hover transition-colors cursor-pointer hover:bg-[rgba(125,211,252,0.05)]"
                     onClick={() => navigate(`/audit-logs/${row.id}`)}
                   >
-                    <td className="py-4 px-5 font-mono text-[#7dd3fc]/90 text-xs">{row.id}</td>
+                    <td className="py-4 px-5 font-mono text-[#7dd3fc] text-xs font-medium">{row.id}</td>
                     <td className="py-4 px-5">
                       <span className="text-[#e0e8f0] font-medium block">{row.customer_name || 'N/A'}</span>
                       <span className="text-[11px] text-[#a0b4c4]">{row.customer_email || ''}</span>
@@ -155,7 +155,7 @@ export function AuditLogs() {
                       {row.created_at ? formatDate(row.created_at) : '-'}
                     </td>
                     <td className="py-4 px-5"><StatusBadge status={row.status} /></td>
-                    <td className="py-4 px-5 font-mono text-[#e0e8f0]">{formatCurrency(row.amount)}</td>
+                    <td className="py-4 px-5 font-mono text-[#e0e8f0] font-semibold">{formatCurrency(row.amount)}</td>
                     <td className="py-4 px-5 text-[#a0b4c4] text-xs">
                       {row.failure_mode ? row.failure_mode.replace(/_/g, ' ') : '-'}
                     </td>
@@ -164,11 +164,17 @@ export function AuditLogs() {
                         {row.action_proposed ? row.action_proposed.replace(/_/g, ' ') : 'None'}
                       </span>
                     </td>
+                    <td className="py-4 px-5 text-xs">
+                      <span className="text-[#7dd3fc] font-medium hover:underline flex items-center gap-1">
+                        View Replay
+                        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_forward</span>
+                      </span>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#a0b4c4]">
+                  <td colSpan={8} className="py-12 text-center text-[#a0b4c4]">
                     <span className="material-symbols-outlined text-3xl mb-2 text-[#a0b4c4]/40">find_in_page</span>
                     <p className="text-sm font-medium">No audit logs found</p>
                     <p className="text-xs text-[#a0b4c4]/70 mt-1">Run a simulation cohort from the dashboard to generate real events.</p>

@@ -71,7 +71,7 @@ export function TransactionDetail({ audit }: TransactionDetailProps) {
                     </div>
                     <p className="text-[11px] text-zinc-400 mb-3">{decision.reason}</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {decision.checks_run.map((chk, i) => (
+                      {decision.checks_run?.map((chk, i) => (
                         <div key={i} className="flex items-center gap-2 text-[10px]">
                           {chk.passed ? (
                             <CheckCircle size={12} className="text-emerald-400" />

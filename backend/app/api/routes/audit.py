@@ -42,22 +42,58 @@ async def get_transaction_audit(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Returns the full, chronological audit trail for a single transaction.
+    Returns the full, chronological audit trail and complete transaction details for a single transaction.
     """
+    txn = await db["transactions"].find_one({"_id": transaction_id})
+    if txn:
+        txn["id"] = str(txn.pop("_id"))
+
+    checkout = None
+    customer = None
+    if txn and txn.get("checkout_id"):
+        chk = await db["checkouts"].find_one({"_id": txn["checkout_id"]})
+        if chk:
+            chk["id"] = str(chk.pop("_id"))
+            checkout = chk
+    if txn and txn.get("customer_id"):
+        cust = await db["customers"].find_one({"_id": txn["customer_id"]})
+        if cust:
+            cust["id"] = str(cust.pop("_id"))
+            customer = cust
+
+    diagnosis = await db["diagnoses"].find_one({"transaction_id": transaction_id}, sort=[("created_at", -1)])
+    if diagnosis:
+        diagnosis["id"] = str(diagnosis.pop("_id"))
+
+    action = await db["recovery_actions"].find_one({"transaction_id": transaction_id}, sort=[("created_at", -1)])
+    if action:
+        action["id"] = str(action.pop("_id"))
+
+    attempts_cursor = db["payment_attempts"].find({"transaction_id": transaction_id}).sort("attempt_number", 1)
+    attempts = await attempts_cursor.to_list(length=50)
+    for att in attempts:
+        att["id"] = str(att.pop("_id"))
+
     cursor = db["audit_events"].find({"transaction_id": transaction_id}).sort("timestamp", 1)
     events = await cursor.to_list(length=100)
     
-    # Fetch guardrail decisions for additional inline context
     guardrail_cursor = db["guardrail_decisions"].find({"transaction_id": transaction_id}).sort("created_at", 1)
     decisions = await guardrail_cursor.to_list(length=50)
     
     for item in events:
-        item["id"] = item.pop("_id")
+        item["id"] = str(item.pop("_id"))
     for item in decisions:
-        item["id"] = item.pop("_id")
+        item["id"] = str(item.pop("_id"))
         
     return {
         "transaction_id": transaction_id,
+        "transaction": txn,
+        "checkout": checkout,
+        "customer": customer,
+        "diagnosis": diagnosis,
+        "recovery_action": action,
+        "payment_attempts": attempts,
         "audit_events": events,
         "guardrail_decisions": decisions
     }
+
