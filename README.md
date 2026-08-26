@@ -39,7 +39,6 @@
 - [API Overview](#-api-overview)
 - [Setup](#-local-development)
 - [Demo](#-demo-walkthrough)
-- [Limitations](#-limitations)
 
 ---
 
@@ -584,20 +583,6 @@ Recommended demo sequence:
    - Recovered Revenue: ₹0
 8. **Settings → API Keys** — Generate and revoke a `sk_live_` key
 9. **Settings → Team** — Invite a user with `OPERATOR` role
-
----
-
-## ⚠️ Limitations
-
-Recovr.ai is a hackathon prototype. The following represent the boundary between this implementation and full production infrastructure:
-
-| Area | Current State | Production Path |
-|---|---|---|
-| Payment gateway | Simulated outcomes (no live Razorpay webhook) | Razorpay webhook integration |
-| Notification delivery | Action types logged and audited; no real SMS/WhatsApp/email sent | Twilio / Gupshup / SendGrid integration |
-| Claude integration | Live when `ANTHROPIC_API_KEY` is set; deterministic fallback otherwise | Production key with retry/quota management |
-| Deployment | Local development server | Cloud hosting (Railway / GCP / AWS) + MongoDB Atlas |
-| TOTP / 2FA | Not implemented | TOTP via FIDO2 or authenticator app |
 
 ---
 
