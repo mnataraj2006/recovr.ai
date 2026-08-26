@@ -3,6 +3,7 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 from httpx import AsyncClient
+from tests.conftest import get_admin_headers
 from app.main import app
 from app.engines.guardrails.engine import guardrail_engine
 from app.engines.scheduler.engine import retry_scheduler
@@ -11,7 +12,7 @@ from app.models.transaction import Transaction
 @pytest.mark.asyncio
 async def test_scenario_1_successful_initial_payment(db):
     """TEST 1: Successful initial payment flow: PAYMENT_ATTEMPTED -> SUCCESS -> RECOVERED."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "Jane Doe", "email": "jane@example.com", "phone": "+919999999991"},
             "cart_value": 1500.0,
@@ -38,7 +39,7 @@ async def test_scenario_1_successful_initial_payment(db):
 @pytest.mark.asyncio
 async def test_scenario_2_gateway_timeout_retry_success(db):
     """TEST 2: Gateway timeout -> retry -> success."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "John Timeout", "email": "john@example.com", "phone": "+919999999992"},
             "cart_value": 2499.0,
@@ -70,7 +71,7 @@ async def test_scenario_2_gateway_timeout_retry_success(db):
 @pytest.mark.asyncio
 async def test_scenario_3_repeated_timeout_stop(db):
     """TEST 3: Gateway timeout -> retry -> retry -> stop (UNRECOVERABLE)."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "Max Retry", "email": "max@example.com", "phone": "+919999999993"},
             "cart_value": 1200.0,
@@ -100,7 +101,7 @@ async def test_scenario_3_repeated_timeout_stop(db):
 @pytest.mark.asyncio
 async def test_scenario_4_insufficient_funds_alternate_payment(db):
     """TEST 4: Insufficient funds -> alternate method (wallet) -> success."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "Poor Balance", "email": "poor@example.com", "phone": "+919999999994"},
             "cart_value": 3000.0,
@@ -133,7 +134,7 @@ async def test_scenario_4_insufficient_funds_alternate_payment(db):
 @pytest.mark.asyncio
 async def test_scenario_5_otp_failure_nudge_success(db):
     """TEST 5: OTP failure -> nudge -> success."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "No OTP", "email": "nootp@example.com", "phone": "+919999999995"},
             "cart_value": 800.0,
@@ -162,7 +163,7 @@ async def test_scenario_5_otp_failure_nudge_success(db):
 @pytest.mark.asyncio
 async def test_scenario_6_abandonment_nudge_payment_success(db):
     """TEST 6: Abandonment -> nudge -> payment -> success."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "Abandoner", "email": "abandoner@example.com", "phone": "+919999999996"},
             "cart_value": 500.0,
@@ -194,7 +195,7 @@ async def test_scenario_6_abandonment_nudge_payment_success(db):
 @pytest.mark.asyncio
 async def test_scenario_7_abandonment_nudge_no_payment(db):
     """TEST 7: Abandonment -> nudge -> no payment / failure -> unrecovered."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {"name": "Hard Abandoner", "email": "hard@example.com", "phone": "+919999999997"},
             "cart_value": 400.0,
@@ -315,7 +316,7 @@ async def test_scenario_10_duplicate_recovery_execution(db):
 @pytest.mark.asyncio
 async def test_final_acceptance_demo_flow(db):
     """TEST 20: Final acceptance test scenario verification: TXN_DEMO_001 and TXN_TIMEOUT_002."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # Part 1: TXN_DEMO_001 (Successful recovery on Attempt 2)
         checkout_payload = {
             "customer": {"name": "Demo Client 1", "email": "demo1@example.com", "phone": "+919999999901"},

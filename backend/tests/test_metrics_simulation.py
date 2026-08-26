@@ -1,5 +1,6 @@
 import pytest
 from httpx import AsyncClient
+from tests.conftest import get_admin_headers
 from app.main import app
 
 @pytest.mark.asyncio
@@ -48,7 +49,7 @@ async def test_metrics_engine_calculations(db):
     })
     
     # 2. Call Metrics Route
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         data = res.json()
@@ -82,7 +83,7 @@ async def test_audit_logs_endpoints(db):
         "metadata": {}
     })
     
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # Test global stream
         res_global = await ac.get("/api/v1/audit-events")
         assert res_global.status_code == 200
@@ -100,7 +101,7 @@ async def test_batch_cohort_simulation_run(db):
     """Verify that cohort batch simulations run and save summary reports successfully."""
     from app.services.auth_service import ensure_seed_user
     await ensure_seed_user(db)
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         login_res = await ac.post("/api/v1/auth/login", json={"email": "admin@recovr.ai", "password": "Admin@123456"})
         token = login_res.json()["access_token"]
         # Trigger simulation run with admin token

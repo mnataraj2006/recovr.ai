@@ -3,13 +3,14 @@ import hashlib
 import json
 import pytest
 from httpx import AsyncClient, ASGITransport
+from tests.conftest import get_admin_headers
 from app.main import app
 from app.config.settings import settings
 
 @pytest.mark.asyncio
 async def test_webhook_hmac_verification_and_idempotency():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=get_admin_headers()) as ac:
         # Create checkout and payment record first
         c_res = await ac.post("/api/v1/checkouts", json={"customer": {"name": "Webhook User", "email": "wh@test.com", "phone": "+123"}, "cart_value": 50.00})
         txn_id = c_res.json()["transaction_id"]

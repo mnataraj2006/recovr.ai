@@ -1,6 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from app.db.connection import get_db
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -11,7 +12,8 @@ async def get_audit_events(
     actor: Optional[str] = Query(None, description="Filter by event actor"),
     limit: int = Query(50, ge=1, le=100, description="Max number of events to return"),
     skip: int = Query(0, ge=0, description="Number of events to skip"),
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Retrieves global structured audit logs with dynamic filtering and pagination.
@@ -34,7 +36,11 @@ async def get_audit_events(
     return events
 
 @router.get("/transactions/{transaction_id}/audit")
-async def get_transaction_audit(transaction_id: str, db = Depends(get_db)):
+async def get_transaction_audit(
+    transaction_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """
     Returns the full, chronological audit trail for a single transaction.
     """

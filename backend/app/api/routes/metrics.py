@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends
 from app.db.connection import get_db
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
 @router.get("/metrics")
-async def get_metrics(db = Depends(get_db)):
+async def get_metrics(
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """
     Calculates and returns revenue recovery performance metrics.
     """

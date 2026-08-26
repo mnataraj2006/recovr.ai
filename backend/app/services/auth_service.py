@@ -49,10 +49,10 @@ def decode_access_token(token: str) -> Optional[dict]:
 async def ensure_seed_user(db):
     """Ensures at least one seed admin user exists for initial login."""
     try:
-        user_count = await db["users"].count_documents({})
-        if user_count == 0:
+        existing = await db["users"].find_one({"email": "admin@recovr.ai"})
+        if not existing:
             seed_user = {
-                "_id": f"usr_{uuid.uuid4().hex[:8]}",
+                "_id": "usr_seed_admin",
                 "email": "admin@recovr.ai",
                 "name": "Admin User",
                 "hashed_password": hash_password("Admin@123456"),

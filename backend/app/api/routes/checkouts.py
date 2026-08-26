@@ -29,8 +29,14 @@ class CheckoutAbandonRequest(BaseModel):
     last_viewed_step: Optional[str] = None
     selected_payment_method: Optional[str] = None
 
+from app.api.dependencies import get_current_user, require_role
+
 @router.post("/checkouts", status_code=status.HTTP_201_CREATED)
-async def create_checkout(req: CheckoutCreateRequest, db = Depends(get_db)):
+async def create_checkout(
+    req: CheckoutCreateRequest,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "OPERATOR"]))
+):
     # 1. Create or Find Customer
     customer_id = f"cust_{uuid.uuid4().hex[:8]}"
     existing_customer = await db["customers"].find_one({"email": req.customer.email})
@@ -99,7 +105,13 @@ async def create_checkout(req: CheckoutCreateRequest, db = Depends(get_db)):
     }
 
 @router.post("/checkouts/{checkout_id}/abandon")
-async def abandon_checkout(checkout_id: str, req: CheckoutAbandonRequest, db = Depends(get_db)):
+async def abandon_checkout(
+    checkout_id: str,
+    req: CheckoutAbandonRequest,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "OPERATOR"]))
+):
+
     # 1. Fetch checkout
     checkout_doc = await db["checkouts"].find_one({"_id": checkout_id})
     if not checkout_doc:
@@ -171,7 +183,11 @@ async def abandon_checkout(checkout_id: str, req: CheckoutAbandonRequest, db = D
     }
 
 @router.get("/transactions/{id}")
-async def get_transaction(id: str, db = Depends(get_db)):
+async def get_transaction(
+    id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     txn_doc = await db["transactions"].find_one({"_id": id})
     if not txn_doc:
         raise HTTPException(
@@ -190,7 +206,13 @@ async def get_transaction(id: str, db = Depends(get_db)):
     }
 
 @router.get("/transactions")
-async def list_transactions(status: Optional[str] = None, limit: int = 20, offset: int = 0, db = Depends(get_db)):
+async def list_transactions(
+    status: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     query = {}
     if status:
         query["status"] = status

@@ -51,8 +51,14 @@ OUTCOME_ERRORS = {
     }
 }
 
+from app.api.dependencies import require_role
+
 @router.post("/payments/create", status_code=status.HTTP_201_CREATED)
-async def create_payment_intent(req: PaymentCreateRequest, db = Depends(get_db)):
+async def create_payment_intent(
+    req: PaymentCreateRequest,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "OPERATOR"]))
+):
     # 1. Fetch transaction
     txn_doc = await db["transactions"].find_one({"_id": req.transaction_id})
     if not txn_doc:
@@ -105,7 +111,11 @@ async def create_payment_intent(req: PaymentCreateRequest, db = Depends(get_db))
     }
 
 @router.post("/payments/attempt")
-async def attempt_payment(req: PaymentAttemptRequest, db = Depends(get_db)):
+async def attempt_payment(
+    req: PaymentAttemptRequest,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "OPERATOR"]))
+):
     # 1. Fetch payment
     payment_doc = await db["payments"].find_one({"_id": req.payment_id})
     if not payment_doc:

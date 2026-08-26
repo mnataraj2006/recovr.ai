@@ -69,8 +69,11 @@ class SimulationRunner:
         
         db = await get_db()
         from app.main import app
+        from app.services.auth_service import create_access_token
+        sim_token = create_access_token({"sub": "usr_seed_admin", "email": "admin@recovr.ai", "role": "ADMIN"})
+        headers = {"Authorization": f"Bearer {sim_token}"}
         
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with AsyncClient(app=app, base_url="http://test", headers=headers) as ac:
             tasks = []
             for profile in COHORT_PROFILES:
                 tasks.append(self._simulate_customer_flow(ac, profile))

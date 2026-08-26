@@ -34,8 +34,13 @@ async def run_simulation(
             detail=f"Simulation run failed: {str(e)}"
         )
 
+from app.api.dependencies import require_role, get_current_user
+
 @router.get("/simulation/history")
-async def get_simulation_history(db = Depends(get_db)):
+async def get_simulation_history(
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """
     Retrieves all past simulation reports in reverse chronological order.
     """

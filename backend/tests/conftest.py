@@ -23,6 +23,15 @@ async def session_db():
     yield
     await db_connection.disconnect()
 
+def get_admin_headers():
+    from app.services.auth_service import create_access_token
+    token = create_access_token({"sub": "usr_seed_admin", "email": "admin@recovr.ai", "role": "ADMIN"})
+    return {"Authorization": f"Bearer {token}"}
+
+@pytest.fixture
+def auth_headers():
+    return get_admin_headers()
+
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def db():
     """Initialize unique test database client and drop database on tear-down."""
@@ -31,6 +40,9 @@ async def db():
     
     # Retrieve DB instance (dynamically resolves to unique DB name)
     database = await get_db()
+    
+    from app.services.auth_service import ensure_seed_user
+    await ensure_seed_user(database)
     
     yield database
     

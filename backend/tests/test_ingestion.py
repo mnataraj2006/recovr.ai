@@ -1,12 +1,13 @@
 import pytest
 import asyncio
 from httpx import AsyncClient
+from tests.conftest import get_admin_headers
 from app.main import app
 
 @pytest.mark.asyncio
 async def test_checkout_and_simulated_payment_failure_flow(db):
     """Test full flow: Checkout creation -> Payment attempt fail -> Webhook processing."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # 1. Create Checkout
         checkout_payload = {
             "customer": {
@@ -95,7 +96,7 @@ async def test_checkout_and_simulated_payment_failure_flow(db):
 @pytest.mark.asyncio
 async def test_manual_checkout_abandonment(db):
     """Test that abandoning a checkout shifts state to CHECKOUT_ABANDONED -> DIAGNOSING -> GUARDRAIL_CHECK."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # 1. Create Checkout
         checkout_payload = {
             "customer": {

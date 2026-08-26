@@ -1,6 +1,7 @@
 import pytest
 import asyncio
 from httpx import AsyncClient
+from tests.conftest import get_admin_headers
 from app.main import app
 from app.models.transaction import Transaction
 from app.engines.diagnosis.engine import diagnosis_engine
@@ -9,7 +10,7 @@ from app.engines.policy.engine import policy_engine
 @pytest.mark.asyncio
 async def test_deterministic_gateway_diagnosis_and_policy(db):
     """Verify rules classification and policy selection for structured failures."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # Create a new Checkout session
         checkout_payload = {
             "customer": {
@@ -56,7 +57,7 @@ async def test_deterministic_gateway_diagnosis_and_policy(db):
 @pytest.mark.asyncio
 async def test_cart_abandonment_llm_fallback_flow(db):
     """Verify that cart abandonments fallback gracefully to UNKNOWN_ABANDONMENT and select appropriate policy."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         checkout_payload = {
             "customer": {
                 "name": "Larry Abandon",

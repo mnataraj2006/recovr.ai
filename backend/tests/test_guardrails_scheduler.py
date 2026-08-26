@@ -3,6 +3,7 @@ import asyncio
 import uuid
 from datetime import datetime, timezone, timedelta
 from httpx import AsyncClient
+from tests.conftest import get_admin_headers
 from app.main import app
 from app.engines.guardrails.engine import guardrail_engine
 from app.engines.scheduler.engine import retry_scheduler
@@ -200,7 +201,7 @@ async def test_guardrail_incentive_limit_violation(db):
 @pytest.mark.asyncio
 async def test_end_to_end_auto_retry_recovery_integration(db):
     """Test full integration: Failure webhook -> Diagnosis -> Policy -> Guardrails -> Scheduler Retry -> Success."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # 1. Create Checkout
         checkout_payload = {
             "customer": {
@@ -266,7 +267,7 @@ async def test_end_to_end_auto_retry_recovery_integration(db):
 @pytest.mark.asyncio
 async def test_successful_initial_payment_flow(db):
     """Test 1: Initial payment attempted succeeds directly -> RECOVERED."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # Create Checkout
         checkout_payload = {
             "customer": {
@@ -298,7 +299,7 @@ async def test_successful_initial_payment_flow(db):
 @pytest.mark.asyncio
 async def test_repeated_timeout_flow(db):
     """Test 3: Repeated timeout failures (Attempt 1 -> Fail, Attempt 2 -> Fail, Attempt 3 -> Fail) -> UNRECOVERABLE."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         # Create Checkout with simulated outcome sequence pre-determined
         checkout_payload = {
             "customer": {

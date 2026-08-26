@@ -2,6 +2,7 @@ import pytest
 import uuid
 from datetime import datetime, timezone
 from httpx import AsyncClient
+from tests.conftest import get_admin_headers
 from app.main import app
 from app.engines.guardrails.engine import guardrail_engine
 
@@ -109,7 +110,7 @@ async def test_deterministic_metrics_dataset_verification(db):
         })
 
     # Fetch Metrics via API
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         data = res.json()
