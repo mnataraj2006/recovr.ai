@@ -3,7 +3,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from app.db.connection import get_db
 from app.services.recovery_service import recovery_service
 
@@ -73,7 +73,7 @@ class SimulationRunner:
         sim_token = create_access_token({"sub": "usr_seed_admin", "email": "admin@recovr.ai", "role": "ADMIN"})
         headers = {"Authorization": f"Bearer {sim_token}"}
         
-        async with AsyncClient(app=app, base_url="http://test", headers=headers) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as ac:
             tasks = []
             for profile in COHORT_PROFILES:
                 tasks.append(self._simulate_customer_flow(ac, profile))

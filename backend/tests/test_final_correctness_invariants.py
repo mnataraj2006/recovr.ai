@@ -1,7 +1,7 @@
 import pytest
 import uuid
 from datetime import datetime, timezone
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from tests.conftest import get_admin_headers
 from app.main import app
 from app.simulation.runner import simulation_runner
@@ -27,7 +27,7 @@ async def test_case_1_normal_success_is_not_recovery(db):
         "status": "Success"
     })
     
-    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         data = res.json()
@@ -67,7 +67,7 @@ async def test_case_2_failed_then_successful_retry_is_recovery(db):
         "status": "Success"
     })
     
-    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         data = res.json()
@@ -93,7 +93,7 @@ async def test_case_3_invalid_recovery_detected(db):
     })
     # No payment attempts inserted
     
-    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         data = res.json()
@@ -110,7 +110,7 @@ async def test_case_4_5_6_nudge_flow_outcomes(db):
     await db["recovery_actions"].delete_many({})
     await db["diagnoses"].delete_many({})
     
-    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=get_admin_headers()) as ac:
         # Case 4: Nudge + Returns + Success = Recovery
         res_4 = await ac.post("/api/v1/checkouts", json={
             "customer": {"name": "Cust 4", "email": "c4@ex.com", "phone": "+919000000004"},
@@ -226,7 +226,7 @@ async def test_case_9_10_11_14_deterministic_cohort_verification(db):
     assert len(db_all) == 5
     
     # Fetch Metrics via API and verify API values match DB-derived values
-    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         api_data = res.json()
@@ -246,7 +246,7 @@ async def test_case_12_13_zero_division_safety(db):
     await db["transactions"].delete_many({})
     await db["payment_attempts"].delete_many({})
     
-    async with AsyncClient(app=app, base_url="http://test", headers=get_admin_headers()) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=get_admin_headers()) as ac:
         res = await ac.get("/api/v1/metrics")
         assert res.status_code == 200
         data = res.json()
