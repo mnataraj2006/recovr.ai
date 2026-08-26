@@ -1,51 +1,49 @@
-import { useMetrics } from './hooks/useMetrics';
-import { useTransactions } from './hooks/useTransactions';
-import { Navbar } from './components/common/Navbar';
-import { MetricCards } from './components/dashboard/MetricCards';
-import { FailureChart } from './components/dashboard/FailureChart';
-import { SimulationHistory } from './components/dashboard/SimulationHistory';
-import { TransactionTable } from './components/transactions/TransactionTable';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AppShell } from './components/layout/AppShell';
+import { Dashboard } from './pages/Dashboard';
+import { Analytics } from './pages/Analytics';
+import { AuditLogs } from './pages/AuditLogs';
+import { TransactionDrillDown } from './pages/TransactionDrillDown';
+import { RiskScores } from './pages/RiskScores';
+import { Settings } from './pages/Settings';
+import { ApiKeys } from './pages/settings/ApiKeys';
+import { General } from './pages/settings/General';
+import { Security } from './pages/settings/Security';
+import { Notifications } from './pages/settings/Notifications';
+import { Team } from './pages/settings/Team';
 
 function App() {
-  const {
-    metrics,
-    transactions,
-    simulationHistory,
-    loading,
-    simulating,
-    statusFilter,
-    setStatusFilter,
-    refresh,
-    triggerSimulation,
-  } = useMetrics();
-
-  const { expandedTxnId, txnAudits, handleRowClick } = useTransactions();
-
   return (
-    <div className="min-h-screen p-6 md:p-8">
-      <Navbar
-        loading={loading}
-        simulating={simulating}
-        onRefresh={refresh}
-        onSimulate={triggerSimulation}
-      />
+    <Routes>
+      <Route element={<AppShell />}>
+        {/* Dashboard */}
+        <Route index element={<Dashboard />} />
+        <Route path="dashboard" element={<Dashboard />} />
 
-      <MetricCards metrics={metrics} />
+        {/* Analytics */}
+        <Route path="analytics" element={<Analytics />} />
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <FailureChart metrics={metrics} />
-        <SimulationHistory history={simulationHistory} />
-      </section>
+        {/* Risk Scores */}
+        <Route path="risk-scores" element={<RiskScores />} />
 
-      <TransactionTable
-        transactions={transactions}
-        expandedTxnId={expandedTxnId}
-        txnAudits={txnAudits}
-        statusFilter={statusFilter}
-        onRowClick={handleRowClick}
-        onFilterChange={setStatusFilter}
-      />
-    </div>
+        {/* Audit Logs */}
+        <Route path="audit-logs" element={<AuditLogs />} />
+        <Route path="audit-logs/:txnId" element={<TransactionDrillDown />} />
+
+        {/* Settings — nested */}
+        <Route path="settings" element={<Settings />}>
+          <Route index element={<Navigate to="/settings/api-keys" replace />} />
+          <Route path="general"       element={<General />} />
+          <Route path="security"      element={<Security />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="api-keys"      element={<ApiKeys />} />
+          <Route path="team"          element={<Team />} />
+        </Route>
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
 

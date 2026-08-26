@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchMetrics, fetchSimulationHistory, runSimulation } from '../services/metricsService';
+import { fetchMetrics, fetchSimulationHistory, runSimulation, clearSimulationData } from '../services/metricsService';
 import { fetchTransactions } from '../services/transactionService';
 import type { MetricData, SimulationHistoryItem } from '../types/metrics';
 import type { Transaction } from '../types/transaction';
@@ -14,11 +14,12 @@ interface DashboardData {
   setStatusFilter: (filter: string) => void;
   refresh: () => Promise<void>;
   triggerSimulation: () => Promise<void>;
+  clearData: () => Promise<void>;
 }
 
 /**
  * Central hook that drives the dashboard: fetches metrics, transactions, and
- * simulation history together. Exposes a simulation trigger and a status filter.
+ * simulation history together. Exposes a simulation trigger, status filter, and data reset.
  */
 export function useMetrics(): DashboardData {
   const [metrics, setMetrics] = useState<MetricData | null>(null);
@@ -62,6 +63,15 @@ export function useMetrics(): DashboardData {
     }
   }, [refresh]);
 
+  const clearData = useCallback(async () => {
+    try {
+      const ok = await clearSimulationData();
+      if (ok) await refresh();
+    } catch (err) {
+      console.error('Failed to clear simulation data:', err);
+    }
+  }, [refresh]);
+
   return {
     metrics,
     transactions,
@@ -72,5 +82,7 @@ export function useMetrics(): DashboardData {
     setStatusFilter,
     refresh,
     triggerSimulation,
+    clearData,
   };
 }
+

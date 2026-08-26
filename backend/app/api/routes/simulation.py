@@ -30,3 +30,30 @@ async def get_simulation_history(db = Depends(get_db)):
     for item in history:
         item["id"] = item.pop("_id")
     return history
+
+@router.delete("/simulation/clear")
+async def clear_simulation_data(db = Depends(get_db)):
+    """
+    Clears all simulation cohorts, test transactions, checkouts, payments,
+    audits, and recovery metrics to start with a fresh clean state for Postman/Live testing.
+    """
+    collections = [
+        "simulation_cohorts",
+        "checkouts",
+        "transactions",
+        "payments",
+        "payment_attempts",
+        "diagnoses",
+        "recovery_actions",
+        "guardrail_decisions",
+        "audit_events",
+        "recovery_outcomes",
+    ]
+    for col in collections:
+        await db[col].delete_many({})
+        
+    return {
+        "success": True,
+        "message": "All simulation cohort data and test transactions cleared successfully."
+    }
+

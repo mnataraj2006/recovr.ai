@@ -15,3 +15,9 @@ export async function runSimulation(): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/v1/simulation/run`, { method: 'POST' });
   return res.ok;
 }
+
+export async function clearSimulationData(): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/v1/simulation/clear`, { method: 'DELETE' });
+  return res.ok;
+}
+
